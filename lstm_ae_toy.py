@@ -19,13 +19,12 @@ def load_data(data_folder):
     X_test = np.load(f"{data_folder}/X_test.npy")
     return X_train, X_val, X_test
 
-def train_epoch(train_loader, model, optimizer, criterion, grad_clip):
-    model.train()
+def train_epoch(train_loader, model, optimizer, criterion, grad_clip, device):
     running_loss = 0.0
     for data in train_loader:
         optimizer.zero_grad()
-        data = data.float()
-        output = model(data)
+        data = data.float().to(device)
+        output = model(data).to(device)
         loss = criterion(output, data)
         loss.backward()
         
@@ -35,20 +34,22 @@ def train_epoch(train_loader, model, optimizer, criterion, grad_clip):
 
     return running_loss / len(train_loader)
 
-def train(train_loader, model, criterion, epochs, grad_clip, learning_rate, optimizer_type):    
+def train(train_loader, model, criterion, epochs, grad_clip, learning_rate, optimizer_type, device):
+    model.to(device)
+    model.train()
     optimizer = optimizer_type(model.parameters(), lr=learning_rate)
     for _ in tqdm(range(epochs), desc="Training"):
-        train_loss = train_epoch(train_loader, model, optimizer, criterion, grad_clip)
+        train_loss = train_epoch(train_loader, model, optimizer, criterion, grad_clip, device)
         # tqdm.write(f"Epoch: {epoch}, Loss: {train_loss}")
     return train_loss
 
-def evaluate(val_loader, model, criterion):
+def evaluate(val_loader, model, criterion, device):
     accumulative_loss = 0.0
     all_outputs = []
     for data in val_loader:
-        data = data.float()
+        data = data.float().to(device)
 
-        output = model(data)
+        output = model(data).to(device)
         all_outputs.append((data, output))
 
         loss = criterion(output, data)
@@ -57,13 +58,13 @@ def evaluate(val_loader, model, criterion):
     return accumulative_loss / len(val_loader), all_outputs
 
 
-def grid_search(X_train, X_val, criterion, optimizer_type) -> dict:
+def grid_search(X_train, X_val, criterion, optimizer_type, device) -> dict:
     #grid search
-    hidden_sizes = [20, 30]
-    grad_clips = [1, 5]
+    hidden_sizes = [25, 30, 35]
+    grad_clips =  [1] #[1, 5]
     learning_rates = [0.001, 0.01]
     batch_sizes = [32, 64]
-    Epochs = [100, 1000]
+    Epochs = [200, 1000]
 
     best_params = {
         "hidden_size": None,
@@ -74,14 +75,14 @@ def grid_search(X_train, X_val, criterion, optimizer_type) -> dict:
     }
     best_val_loss = float("inf")
     best_trial = None
-    for i, (hs, gc, lr, bs, ep) in \
-    tqdm(enumerate(itertools.product(hidden_sizes, grad_clips, learning_rates, batch_sizes, Epochs)), desc="Grid search"):
+    for i, (ep, hs, gc, lr, bs) in \
+    tqdm(enumerate(itertools.product(Epochs, hidden_sizes, grad_clips, learning_rates, batch_sizes)), desc="Grid search"):
         tqdm.write(f"Starting with parameters hs: {hs}, gc: {gc}, lr: {lr}, bs: {bs}, ep: {ep}")
-        model = LSTM_AE(X_train.shape[1], hs)
+        model = LSTM_AE(X_train.shape[1], hs).to(device)
         train_loader = DataLoader(X_train, batch_size=bs, shuffle=True)
         val_loader = DataLoader(X_val, batch_size=bs, shuffle=False)
-        train_loss = train(train_loader, model, criterion, ep, gc, lr, optimizer_type)
-        val_loss, _ = evaluate(val_loader, model, criterion)
+        train_loss = train(train_loader, model, criterion, ep, gc, lr, optimizer_type, device)
+        val_loss, _ = evaluate(val_loader, model, criterion, device)
         tqdm.write(f"train_loss: {train_loss}, val_loss: {val_loss}\n")
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -96,6 +97,8 @@ def grid_search(X_train, X_val, criterion, optimizer_type) -> dict:
     return best_params
 
 def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     args = get_train_args()
     data_folder = args.data_folder
     do_grid_search = args.grid_search
@@ -116,7 +119,7 @@ def main():
 
     #grid search
     if do_grid_search:
-        best_params = grid_search(X_train, X_val, criterion, optimizer_type)
+        best_params = grid_search(X_train, X_val, criterion, optimizer_type, device)
         print(f"Best parameters: {best_params}")
     batch_size = best_params["batch_size"] if best_params else args.batch_size
     hidden_size = best_params["hidden_size"] if best_params else args.hidden_size
@@ -133,16 +136,16 @@ def main():
     test_loader = DataLoader(X_test, batch_size=batch_size, shuffle=False)
 
     #train
-    train(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type)
+    train(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, device)
     
     #evaluate
-    test_loss, outputs_pairs = evaluate(test_loader, model, criterion)
+    test_loss, outputs_pairs = evaluate(test_loader, model, criterion, device)
     print(f"Test loss: {test_loss}")
     
     #save model
     models_folder = "./models"
     os.makedirs(models_folder, exist_ok=True)
-    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}"
+    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}{'_FromGreadSearch' if do_grid_search else ''}"
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
     
     #plot some outputs pairs

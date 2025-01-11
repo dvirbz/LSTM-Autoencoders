@@ -111,8 +111,8 @@ def main():
         output = output[0]
         print(data.shape, output.shape)
         plt.subplot(2, 1, i+1)
-        plt.plot(data.detach().numpy(), label="data")
-        plt.plot(output.detach().numpy(), label="output")
+        plt.plot(data.detach().cpu().numpy(), label="data")
+        plt.plot(output.detach().cpu().numpy(), label="output")
         plt.legend()
         plt.title(f"Output pair {i}")
         plt.xlabel("Time")

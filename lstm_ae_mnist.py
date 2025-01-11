@@ -24,33 +24,31 @@ def main():
     print(args)
     mnist_train = datasets.MNIST(root="./data", train=True, download=True, transform=transforms.ToTensor())
     mnist_test = datasets.MNIST(root="./data", train=False, download=True, transform=transforms.ToTensor())
-    n_features = n_features
+    _, n_rows, n_features = mnist_train.data.shape
 
-    mnist_train.data = mnist_train.data.view(-1, n_features)
-    mnist_test.data = mnist_test.data.view(-1, n_features)
+    # mnist_train.data = mnist_train.data.view(-1, n_features)
+    # mnist_test.data = mnist_test.data.view(-1, n_features)
 
     #criterion
     criterion = nn.MSELoss()
 
     optimizer_type = optim.Adam if args.optimizer == "adam" else optim.SGD # should expand to support more optimizers
 
-    best_params = None
-
     #grid search
-    batch_size = best_params["batch_size"] if best_params else args.batch_size
-    hidden_size = best_params["hidden_size"] if best_params else args.hidden_size
-    lr = best_params["learning_rate"] if best_params else args.lr
-    gradient_clip = best_params["grad_clip"] if best_params else args.grad_clip
-    epochs = best_params["epochs"] if best_params else args.epochs
+    batch_size = args.batch_size
+    hidden_size = n_features // 2 if args.hidden_size == 'half' else int(args.hidden_size)
+    lr = args.lr
+    gradient_clip = args.grad_clip
+    epochs = args.epochs
     print(f"{mnist_train.data.shape=}, {mnist_test.data.shape=}")
         
     #create model
-    model = LSTM_AE(n_features, hidden_size)
+    model = LSTM_AE(n_features, hidden_size, bidirectional=args.bidirectional)
     print(model)
 
     #create data loaders
-    train_loader = DataLoader(mnist_train, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(mnist_test, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(mnist_train.data, batch_size=batch_size)
+    test_loader = DataLoader(mnist_test.data, batch_size=batch_size)
 
     #train
     train(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, device)
@@ -62,25 +60,32 @@ def main():
     #save model
     models_folder = "./models"
     os.makedirs(models_folder, exist_ok=True)
-    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{'_FromGreadSearch' if do_grid_search else ''}"
+    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{'_FromGridSearch' if do_grid_search else ''}"
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
 
-    #plot some outputs pairs
-    for i in range(2):
-        data, output = outputs_pairs[i]
-        data = data[0] 
-        output = output[0]
-        print(data.shape, output.shape)
-        plt.subplot(2, 1, i+1)
-        plt.plot(data.detach().cpu().numpy(), label="data")
-        plt.plot(output.detach().cpu().numpy(), label="output")
-        plt.legend()
-        plt.title(f"Output pair {i}")
-        plt.xlabel("Time")
-        plt.ylabel("Value")
-        plt.tight_layout()
     os.makedirs("./plots", exist_ok=True)
-    plt.savefig(f"./plots/{model_name}.png")
+
+    n_digits_to_plot = 3
+    #plot some outputs pairs
+    plotted_digits = set()
+    # mnist_test.data = mnist_test.data.view(-1, n_rows, n_features)
+
+    for data, target in mnist_test:
+        if target in plotted_digits:
+            continue
+        plotted_digits.add(target)
+        input_img = data.reshape(n_rows, n_features)
+        output = model(input_img.to(device)).detach().cpu().numpy()
+        _, ax = plt.subplots(1, 2)
+        ax[0].imshow(input_img, cmap="gray")
+        ax[0].set_title("True digit")
+        ax[1].imshow(output, cmap="gray")
+        ax[1].set_title("Predicted digit")
+        ax[0].set_axis_off()
+        ax[1].set_axis_off()
+        plt.savefig(f"./plots/{model_name}_digit_{int(target)}.png")
+        if len(plotted_digits) == n_digits_to_plot:
+            break
         
 if __name__ == "__main__":
     main()

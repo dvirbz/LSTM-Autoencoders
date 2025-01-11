@@ -147,7 +147,7 @@ def main():
     os.makedirs(models_folder, exist_ok=True)
     model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{'_FromGreadSearch' if do_grid_search else ''}"
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
-    
+
     #plot some outputs pairs
     for i in range(2):
         data, output = outputs_pairs[i]

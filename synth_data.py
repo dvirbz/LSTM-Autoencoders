@@ -21,12 +21,14 @@ def split_dataset(X, y, val_size=0.2, test_size=0.2):
     
 def plot_data(X, number_of_plots=5):
     random_selection = np.random.rand(number_of_plots)*len(X)
+    random_selection = random_selection.astype(int)
     for i in random_selection:
-        plt.plot(X[int(i)])
+        plt.plot(X[i], label= f"Index: {i}")
         
     plt.title("Synthetic data at {} random indices".format(number_of_plots))
     plt.xlabel("Time")
     plt.ylabel("Value")
+    plt.legend()
     plt.savefig("./plots/synthetic_data.png")
     plt.show()
 

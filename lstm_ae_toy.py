@@ -141,11 +141,11 @@ def main():
     #evaluate
     test_loss, outputs_pairs = evaluate(test_loader, model, criterion, device)
     print(f"Test loss: {test_loss}")
-    
+    test_loss = np.round(test_loss, 4)
     #save model
     models_folder = "./models"
     os.makedirs(models_folder, exist_ok=True)
-    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}{'_FromGreadSearch' if do_grid_search else ''}"
+    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{'_FromGreadSearch' if do_grid_search else ''}"
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
     
     #plot some outputs pairs

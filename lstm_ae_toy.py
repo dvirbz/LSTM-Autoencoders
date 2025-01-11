@@ -81,7 +81,7 @@ def grid_search(X_train, X_val, criterion, optimizer_type) -> dict:
         train_loader = DataLoader(X_train, batch_size=bs, shuffle=True)
         val_loader = DataLoader(X_val, batch_size=bs, shuffle=False)
         train_loss = train(train_loader, model, criterion, ep, gc, lr, optimizer_type)
-        val_loss = evaluate(val_loader, model, criterion)
+        val_loss, _ = evaluate(val_loader, model, criterion)
         tqdm.write(f"train_loss: {train_loss}, val_loss: {val_loss}\n")
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -142,11 +142,15 @@ def main():
     #save model
     models_folder = "./models"
     os.makedirs(models_folder, exist_ok=True)
-    torch.save(model.state_dict(), f"./models/model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}.pt")
+    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}"
+    torch.save(model.state_dict(), f"./models/{model_name}.pt")
     
     #plot some outputs pairs
     for i in range(2):
         data, output = outputs_pairs[i]
+        data = data[0] 
+        output = output[0]
+        print(data.shape, output.shape)
         plt.subplot(2, 1, i+1)
         plt.plot(data.detach().numpy(), label="data")
         plt.plot(output.detach().numpy(), label="output")
@@ -154,6 +158,9 @@ def main():
         plt.title(f"Output pair {i}")
         plt.xlabel("Time")
         plt.ylabel("Value")
+        plt.tight_layout()
+    os.makedirs("./plots", exist_ok=True)
+    plt.savefig(f"./plots/{model_name}.png")
         
 if __name__ == "__main__":
     main()

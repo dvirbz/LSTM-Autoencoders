@@ -7,56 +7,12 @@ import matplotlib.pyplot as plt
 
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from sklearn.model_selection import GridSearchCV
 import itertools
 
 from argparser import get_train_args
 from lstm_AE import LSTM_AE
-
-def load_data(data_folder):
-    X_train = np.load(f"{data_folder}/X_train.npy")
-    X_val = np.load(f"{data_folder}/X_val.npy")
-    X_test = np.load(f"{data_folder}/X_test.npy")
-    return X_train, X_val, X_test
-
-def train_epoch(train_loader, model, optimizer, criterion, grad_clip, device):
-    running_loss = 0.0
-    for data in train_loader:
-        optimizer.zero_grad()
-        data = data.float().to(device)
-        output = model(data).to(device)
-        loss = criterion(output, data)
-        loss.backward()
-        
-        nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-        optimizer.step()
-        running_loss += loss.item()
-
-    return running_loss / len(train_loader)
-
-def train(train_loader, model, criterion, epochs, grad_clip, learning_rate, optimizer_type, device):
-    model.to(device)
-    model.train()
-    optimizer = optimizer_type(model.parameters(), lr=learning_rate)
-    for _ in tqdm(range(epochs), desc="Training"):
-        train_loss = train_epoch(train_loader, model, optimizer, criterion, grad_clip, device)
-        # tqdm.write(f"Epoch: {epoch}, Loss: {train_loss}")
-    return train_loss
-
-def evaluate(val_loader, model, criterion, device):
-    accumulative_loss = 0.0
-    all_outputs = []
-    for data in val_loader:
-        data = data.float().to(device)
-
-        output = model(data).to(device)
-        all_outputs.append((data, output))
-
-        loss = criterion(output, data)
-        accumulative_loss += loss.item()
-
-    return accumulative_loss / len(val_loader), all_outputs
-
+from train_utils import train, evaluate
+from utils import load_data
 
 def grid_search(X_train, X_val, criterion, optimizer_type, device) -> dict:
     #grid search

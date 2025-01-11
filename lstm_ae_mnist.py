@@ -7,13 +7,10 @@ import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 
 from torch.utils.data import DataLoader
-from tqdm import tqdm
-import itertools
 
 from argparser import get_train_args
 from lstm_AE import LSTM_AE
-from train_utils import train, evaluate
-from utils import load_data
+from train_utils import train, evaluate, plot_train_losses
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -25,9 +22,6 @@ def main():
     mnist_train = datasets.MNIST(root="./data", train=True, download=True, transform=transforms.ToTensor())
     mnist_test = datasets.MNIST(root="./data", train=False, download=True, transform=transforms.ToTensor())
     _, n_rows, n_features = mnist_train.data.shape
-
-    # mnist_train.data = mnist_train.data.view(-1, n_features)
-    # mnist_test.data = mnist_test.data.view(-1, n_features)
 
     #criterion
     criterion = nn.MSELoss()
@@ -51,7 +45,9 @@ def main():
     test_loader = DataLoader(mnist_test.data, batch_size=batch_size)
 
     #train
-    train(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, device)
+    # train(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, device)
+    plot_train_losses(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, './plots', device)
+
     
     #evaluate
     test_loss, outputs_pairs = evaluate(test_loader, model, criterion, device)
@@ -68,7 +64,6 @@ def main():
     n_digits_to_plot = 3
     #plot some outputs pairs
     plotted_digits = set()
-    # mnist_test.data = mnist_test.data.view(-1, n_rows, n_features)
 
     for data, target in mnist_test:
         if target in plotted_digits:

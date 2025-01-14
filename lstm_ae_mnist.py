@@ -48,33 +48,35 @@ def main():
     gradient_clip = args.grad_clip
     epochs = args.epochs
         
+    #create data loaders
+    test_full_loader = DataLoader(mnist_test, batch_size=1)
+    train_loader = DataLoader(mnist_train, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(mnist_test, batch_size=batch_size)
+    
     #create model
     # model = LSTM_AE(n_features, hidden_size, bidirectional=args.bidirectional)
     model = LSTM_AE_Classifier(n_features, hidden_size, len(np.unique(mnist_train.targets)) ,bidirectional=args.bidirectional)
     print(model)
 
-    #create data loaders
-    test_full_loader = DataLoader(mnist_test, batch_size=1)
-    train_loader = DataLoader(mnist_train, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(mnist_test, batch_size=batch_size)
-
+    # Make sure correct plot folder exits
     pixel_wise = "_Pixel_wise" if args.pixel_wise else ""
+    plot_folder = "./plots/MNIST"
+    os.makedirs(plot_folder, exist_ok=True)
     #train
     # train(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, device)
-    plot_train_losses(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, './plots/'+ pixel_wise, device, is_cls_ae=True)
+    plot_train_losses(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, f'{plot_folder}/'+ pixel_wise, device, is_cls_ae=True)
 
-    
-    #evaluate
-    test_loss, accuracy = evaluate(test_loader, model, criterion, device, is_cls_ae=True)
-    print(f"Test loss: {test_loss}")
-    test_loss = np.round(test_loss, 4)
     #save model
     models_folder = "./models"
     os.makedirs(models_folder, exist_ok=True)
     model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{'_FromGridSearch' if do_grid_search else ''}{pixel_wise}"
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
 
-    os.makedirs("./plots", exist_ok=True)
+    
+    #evaluate
+    test_loss, accuracy = evaluate(test_loader, model, criterion, device, is_cls_ae=True)
+    print(f"Test loss: {test_loss}")
+    test_loss = np.round(test_loss, 4)
 
     n_digits_to_plot = 3
     #plot some outputs pairs

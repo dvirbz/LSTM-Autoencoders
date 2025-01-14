@@ -86,10 +86,10 @@ def main():
         if target in plotted_digits:
             continue
         plotted_digits.add(target)
-        print(f"{data.shape=}")
+        # print(f"{data.shape=}")
         output, probs = model(data.to(device))
         input_img = data.squeeze().detach().cpu().numpy().reshape(n_rows_og, n_features_og)
-        print(f"{probs=}")
+        # print(f"{probs=}")
         output = output.squeeze().detach().cpu().numpy().reshape(n_rows_og, n_features_og)
         predicted_digit = torch.argmax(probs)
         _, ax = plt.subplots(1, 2)

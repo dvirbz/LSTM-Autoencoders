@@ -96,6 +96,11 @@ def evaluate_CLS(val_loader, model, criterion, device):
     total_loss = accumulative_loss / len(val_loader)
     return total_loss, accuracy
 
+def evaluate(val_loader, model, criterion, device, is_cls_ae = False):
+    if is_cls_ae:
+        return evaluate_CLS(val_loader, model, criterion, device)
+    return evaluate_AE(val_loader, model, criterion, device)    
+
 def train(train_loader,
           model,
           criterion,

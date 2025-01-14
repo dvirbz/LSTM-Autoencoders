@@ -18,7 +18,7 @@ def main():
     args = get_train_args()
     do_grid_search = args.grid_search
     
-    print(args)
+
     transformations = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,)),
@@ -28,10 +28,9 @@ def main():
         # add transformation to flatten the image
         transformations = transforms.Compose(transformations.transforms +
                                              [transforms.Lambda(lambda x: x.view(-1, 1))])
-    
+
     mnist_train = datasets.MNIST(root="./data", train=True, download=True, transform=transformations)
     mnist_test = datasets.MNIST(root="./data", train=False, download=True, transform=transformations)
-    test_full_loader = DataLoader(mnist_test, batch_size=1)
     _, n_rows_og, n_features_og = mnist_train.data.shape
     n_rows = n_rows_og if not args.pixel_wise else n_rows_og * n_features_og
     n_features = n_features_og if not args.pixel_wise else 1
@@ -46,10 +45,8 @@ def main():
     batch_size = args.batch_size
     hidden_size = n_features // 2 if args.hidden_size == 'half' else int(args.hidden_size)
     lr = args.lr
-    print(f"{lr=}")
     gradient_clip = args.grad_clip
     epochs = args.epochs
-    print(f"{mnist_train.data.shape=}, {mnist_test.data.shape=}")
         
     #create model
     # model = LSTM_AE(n_features, hidden_size, bidirectional=args.bidirectional)
@@ -57,6 +54,7 @@ def main():
     print(model)
 
     #create data loaders
+    test_full_loader = DataLoader(mnist_test, batch_size=1)
     train_loader = DataLoader(mnist_train, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(mnist_test, batch_size=batch_size)
 

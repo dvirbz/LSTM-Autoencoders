@@ -19,7 +19,9 @@ class LSTM_AE_Classifier(nn.Module):
         self.fc = nn.Linear(hidden_size * 2 if bidirectional else hidden_size, number_classes)
         
     def forward(self, x):
-        z, _ = self.encoder(x)
+        z, (h_n, _) = self.encoder(x)
+        # print(f"{h_n.shape=}, {z.shape=}")
         x_hat, _ = self.decoder(z)
-        cls = self.fc(z)
+        cls = self.fc(h_n.squeeze(0))
+        # print(f"{cls.dtype=}")
         return x_hat, cls

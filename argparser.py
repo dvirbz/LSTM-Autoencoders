@@ -12,5 +12,5 @@ def get_train_args():
     parser.add_argument('--data_folder', type=str, default=None, help='Data folder')
     parser.add_argument('--grid_search', action='store_true', help='Grid search')
     parser.add_argument('--bidirectional', action='store_true', help='whether to use bidirectional LSTM')
-
+    parser.add_argument('--pixel_wise', action='store_true', help='whether to use pixel-wise transformation')
     return parser.parse_args()

@@ -78,13 +78,14 @@ def main():
         best_params = grid_search(X_train, X_val, criterion, optimizer_type, device)
         print(f"Best parameters: {best_params}")
     batch_size = best_params["batch_size"] if best_params else args.batch_size
-    hidden_size = best_params["hidden_size"] if best_params else args.hidden_size
+    hidden_size = best_params["hidden_size"] if best_params else int(args.hidden_size)
     lr = best_params["learning_rate"] if best_params else args.lr
     gradient_clip = best_params["grad_clip"] if best_params else args.grad_clip
     epochs = best_params["epochs"] if best_params else args.epochs
+    bidirectional = args.bidirectional
         
     #create model
-    model = LSTM_AE(X_train.shape[1], hidden_size)
+    model = LSTM_AE(X_train.shape[1], hidden_size, bidirectional=bidirectional)
     print(model)
 
     #create data loaders

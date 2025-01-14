@@ -1,7 +1,7 @@
 import os
 import torch
 from torch import nn
-
+from torchvision import transforms
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -35,6 +35,26 @@ def preProcessData(df):
     dataset = df_pivot.values.reshape(len(df_pivot), max_days, 4)
     return dataset
 
+
+def SplitData(dataset):
+    N_samples, N_days, N_features = dataset.shape
+    dataset = torch.tensor(dataset, dtype=torch.float32)
+    dataset = dataset.permute(1, 0, 2)
+    # dataset = transforms.Normalize(dataset.mean(), dataset.std())(dataset)
+    train_data, test_data = train_test_split(dataset.detach().cpu(), test_size=0.2, shuffle=False)
+    train_data, val_data = train_test_split(train_data, test_size=0.25, shuffle=False)
+    
+    transform = transforms.Compose([
+        transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32).permute(1, 0, 2)),
+        ])
+
+    train_data = transform(train_data)
+    # print(train_data[0])
+    val_data = transform(val_data)
+    test_data = transform(test_data)
+
+    return train_data, val_data, test_data
+
 def main():
     data_path = "./data/"
     file_name = "sp500.csv"
@@ -54,11 +74,7 @@ def main():
     print(f"{N_samples=}, {N_days=}, {N_features=}")
     
     # Split the data
-    dataset = torch.tensor(dataset, dtype=torch.float32)
-    dataset = dataset.permute(1, 0, 2)
-    train_data, test_data = train_test_split(dataset.detach().cpu(), test_size=0.2)
-    train_data, val_data = train_test_split(train_data, test_size=0.25)
-    
+    train_data, val_data, test_data = SplitData(dataset)    
     print(f"{train_data.shape=}, {val_data.shape=}, {test_data.shape=}")
     
     args = get_train_args()
@@ -83,7 +99,7 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size)
-    
+    test_loader1 = torch.utils.data.DataLoader(test_data, batch_size=1)
     #create model
     model = LSTM_AE(N_features, hidden_size, bidirectional=args.bidirectional)
     print(model)
@@ -96,17 +112,46 @@ def main():
     #train
     train_loss = plot_train_losses(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, plot_folder, device)
     
+    #evaluate
+    test_loss, all_outputs = evaluate(test_loader, model, criterion, device)
+    print(f"Test loss: {test_loss}")
     #save model
     models_folder = "./models"
     os.makedirs(models_folder, exist_ok=True)
     model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}"
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
     
-    #evaluate
-    test_loss, all_outputs = evaluate(test_loader, model, criterion, device)
-    
+    number_of_plots = 3
+    i = 0
     #plot some outputs pairs
-    
+    for data in test_loader1:
+        if i == number_of_plots:
+            break
+        output = model(data.to(device))
+        open, high, low, close = data.squeeze().permute(1, 0).detach().cpu().numpy()
+        pred_open, pred_high, pred_low, pred_close = output.squeeze().permute(1, 0).detach().cpu().numpy()
+        plt.subplot(2, 2, 1)
+        plt.plot(open, label="Open")
+        plt.plot(pred_open, label="Pred Open")
+        plt.legend()
+        
+        plt.subplot(2, 2, 2)
+        plt.plot(high, label="High")
+        plt.plot(pred_high, label="Pred High")
+        plt.legend()
+        
+        plt.subplot(2, 2, 3)
+        plt.plot(low, label="Low")
+        plt.plot(pred_low, label="Pred Low")
+        plt.legend()
+        
+        plt.subplot(2, 2, 4)
+        plt.plot(close, label="Close")
+        plt.plot(pred_close, label="Pred Close")
+        plt.legend()
+        plt.show()
+        i += 1
+        
 if __name__ == "__main__":
     main()
         

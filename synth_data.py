@@ -22,13 +22,13 @@ def split_dataset(X, y, val_size=0.2, test_size=0.2):
 def plot_data(X, number_of_plots=5):
     random_selection = np.random.rand(number_of_plots)*len(X)
     random_selection = random_selection.astype(int)
-    for i in random_selection:
-        plt.plot(X[i], label= f"Index: {i}")
+    fig, ax = plt.subplots(number_of_plots, 1, figsize=(8, 2 * number_of_plots))
+    for i, img_idx in enumerate(random_selection):
+        ax[i].plot(X[img_idx], label= f"signal: {i + 1}")
+        ax[i].set_title(f"Signal {i + 1}")
+        ax[i].set_ylabel("Value")
         
-    plt.title("Synthetic data at {} random indices".format(number_of_plots))
     plt.xlabel("Time")
-    plt.ylabel("Value")
-    plt.legend()
     plt.savefig("./plots/synthetic_data.png")
     plt.show()
 

@@ -9,15 +9,13 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 
 from argparser import get_train_args
-from lstm_AE import LSTM_AE, LSTM_AE_Classifier
+from lstm_AE import LSTM_AE_Classifier
 from train_utils import train, evaluate, plot_train_losses
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     args = get_train_args()
-    do_grid_search = args.grid_search
-    
 
     transformations = transforms.Compose([
         transforms.ToTensor(),

@@ -39,13 +39,23 @@ def main():
 
     #optuna search
     best_params = None
+    hidden_size_limit = input_shape // 2
     if hyper_search:
-        n_trials = 100
-        best_params = optuna_train(train_loader, val_loader, criterion, optimizer_type, args.trial_epochs, 'ae', n_trials, device)
+        best_params = optuna_train(train_loader,
+                                   val_loader,
+                                   criterion,
+                                   optimizer_type,
+                                   args.trial_epochs,
+                                   'ae',
+                                   args.n_trials,
+                                   hidden_size_limit,
+                                   device
+                                   )
+        print(f"Best params: {best_params}")
 
     hidden_size = best_params["hidden_size"] if best_params else args.hidden_size
     hidden_size = input_shape // 2 if hidden_size == 'half' else int(hidden_size)
-    lr = best_params["learning_rate"] if best_params else args.lr
+    lr = best_params["lr"] if best_params else args.lr
     gradient_clip = best_params["grad_clip"] if best_params else args.grad_clip
     bidirectional = args.bidirectional
         
@@ -55,6 +65,7 @@ def main():
 
     #train
     save_path = "./plots/toy/"
+    os.makedirs(save_path, exist_ok=True)
     plot_train_losses(train_loader,
                       model,
                       criterion,
@@ -69,14 +80,14 @@ def main():
     
     
     #evaluate
-    test_loss, outputs_pairs = evaluate(test_loader, model, criterion, device)
+    test_loss, outputs_pairs = evaluate(test_loader, model, criterion, 'ae', device)
     print(f"Test loss: {test_loss}")
     test_loss = np.round(test_loss, 4)
 
     #save model
     models_folder = "./models"
     os.makedirs(models_folder, exist_ok=True)
-    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{'_FromGreadSearch' if do_grid_search else ''}"
+    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{n_epochs=}_{batch_size=}_{test_loss=}"
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
     for i in range(2):
         data, output = outputs_pairs[i]
@@ -92,7 +103,7 @@ def main():
         plt.ylabel("Value")
         plt.tight_layout()
     os.makedirs("./plots", exist_ok=True)
-    plt.savefig(f"./plots/{model_name}.png")
+    plt.savefig(f"./plots/toy/{model_name}.png")
         
 if __name__ == "__main__":
     main()

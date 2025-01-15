@@ -13,7 +13,7 @@ def get_train_args():
     parser.add_argument('--bidirectional', action='store_true', help='whether to use bidirectional LSTM')
     parser.add_argument('--pixel_wise', action='store_true', help='whether to use pixel-wise transformation')
     parser.add_argument('--hyper_search', action='store_true', help='Whether to perform hyperparameter search')
-    parser.add_argument('--n_trials', type=int, help='number of trials for hyperparameter search')
+    parser.add_argument('--n_trials', type=int, default=20, help='number of trials for hyperparameter search')
     parser.add_argument('--trial_epochs', type=int, default=100, help='Number of epochs per trial for hyperparameter search')
 
     return parser.parse_args()

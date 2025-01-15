@@ -260,14 +260,14 @@ def optuna_train(
   n_epochs,
   type,
   n_trials,
-  device,      
+  hidden_size_limit,
+  device,
 ):
     def objective(trial):
         hyperparams = {}
-        hyperparams["lr"] = trial.suggest_float("lr", 1e-5, 1e-1)
-        hyperparams["grad_clip"] = trial.suggest_float("grad_clip", 0.1, 1)
-        hyperparams["hidden_size"] = trial.suggest_int("hidden_size", 1, 100)
-        hyperparams["bidirectional"] = trial.suggest_categorical("bidirectional", [True, False])
+        hyperparams["lr"] = trial.suggest_categorical("lr", np.logspace(-4, -1, num=100))
+        hyperparams["grad_clip"] = trial.suggest_categorical("grad_clip", np.arange(0.1, 1.1, 0.1))
+        hyperparams["hidden_size"] = trial.suggest_int("hidden_size", 1, hidden_size_limit)
         input_shape = train_loader.dataset.shape[1]
 
         match type:
@@ -280,7 +280,7 @@ def optuna_train(
             case _:
                 raise NotImplementedError(f"Type {type} not implemented")
 
-        model = model(input_shape, hyperparams["hidden_size"], bidirectional=hyperparams["bidirectional"])
+        model = model(input_shape, hyperparams["hidden_size"], bidirectional=False)
         model.to(device)
         train(train_loader,
               model,

@@ -39,7 +39,7 @@ def main():
     #criterion
     criterion = nn.MSELoss()
 
-    optimizer_type = optim.Adam if args.optimizer == "adam" else optim.SGD # should expand to support more optimizers
+    optimizer_type = optim.Adam if args.optimizer == "adam" else optim.SGD
 
     #grid search
     batch_size = args.batch_size
@@ -62,9 +62,17 @@ def main():
     pixel_wise = "_Pixel_wise" if args.pixel_wise else ""
     plot_folder = "./plots/MNIST"
     os.makedirs(plot_folder, exist_ok=True)
-    #train
-    # train(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, device)
-    plot_train_losses(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, f'{plot_folder}/'+ pixel_wise, device, is_cls_ae=True)
+    plot_train_losses(train_loader,
+                      model,
+                      criterion,
+                      epochs,
+                      gradient_clip,
+                      lr,
+                      optimizer_type,
+                      f'{plot_folder}/'+ pixel_wise,
+                      'cls',
+                      device,
+                      )
 
 
     
@@ -86,10 +94,8 @@ def main():
         if target in plotted_digits:
             continue
         plotted_digits.add(target)
-        # print(f"{data.shape=}")
         output, probs = model(data.to(device))
         input_img = data.squeeze().detach().cpu().numpy().reshape(n_rows_og, n_features_og)
-        # print(f"{probs=}")
         output = output.squeeze().detach().cpu().numpy().reshape(n_rows_og, n_features_og)
         predicted_digit = torch.argmax(probs)
         _, ax = plt.subplots(1, 2)

@@ -1,10 +1,14 @@
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
+import numpy as np
+import optuna
+
 from torch.nn.functional import one_hot
 from torch.optim.lr_scheduler import _LRScheduler
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-import numpy as np
+
+from lstm_AE import LSTM_AE, LSTM_AE_Classifier, LSTM_Regressor
 
 class SqrtSched(_LRScheduler):
     def __init__(self, optimizer, last_epoch=-1, verbose="deprecated"):
@@ -23,7 +27,6 @@ def train_epoch_AE(train_loader, model, optimizer, criterion, grad_clip, device)
         loss.backward()
         
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-        # print(f"grads: {optimizer.param_groups[0]['params'][0].grad}")
         optimizer.step()
         running_loss += loss.item()
 
@@ -43,6 +46,23 @@ def train_epoch_CLS(train_loader, model, optimizer, criterion, grad_clip, device
         ce_loss = ce_criterion(probs, targets)
         ae_loss = criterion(output, data)
         loss = ae_loss + ce_loss
+        loss.backward()
+        
+        nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        optimizer.step()
+        running_loss += loss.item()
+
+    total_loss = running_loss / len(train_loader)
+    return total_loss
+
+def train_epoch_regressor(train_loader, model, optimizer, criterion, grad_clip, device):
+    running_loss = 0.0
+    for data, targets in train_loader:
+        optimizer.zero_grad()
+        targets = targets.to(device)
+        data = data.float().to(device)
+        x_hat, y_hat = model(data)
+        loss = criterion(data, x_hat) + criterion(targets, y_hat)
         loss.backward()
         
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -96,10 +116,32 @@ def evaluate_CLS(val_loader, model, criterion, device):
     total_loss = accumulative_loss / len(val_loader)
     return total_loss, accuracy
 
-def evaluate(val_loader, model, criterion, device, is_cls_ae = False):
-    if is_cls_ae:
-        return evaluate_CLS(val_loader, model, criterion, device)
-    return evaluate_AE(val_loader, model, criterion, device)    
+def evaluate_regressor(val_loader, model, criterion, device):
+    accumulative_loss = 0.0
+    model.eval()
+    with torch.no_grad():
+        for data, targets in val_loader:
+            targets = targets.to(device)
+            data = data.float().to(device)
+            x_hat, y_hat = model(data)
+            loss = criterion(data, x_hat) + criterion(targets, y_hat)
+            accumulative_loss += loss.item()
+
+    total_loss = accumulative_loss / len(val_loader)
+    return total_loss, None
+
+def evaluate(val_loader, model, criterion, type, device):
+    match type:
+        case 'ae':
+            evaluator = evaluate_AE
+        case 'cls':
+            evaluator = evaluate_CLS
+        case 'reg':
+            evaluator = evaluate_regressor
+        case _:
+            raise NotImplementedError(f"Type {type} not implemented")
+
+    return evaluator(val_loader, model, criterion, device)
 
 def train(train_loader,
           model,
@@ -108,19 +150,26 @@ def train(train_loader,
           grad_clip,
           learning_rate,
           optimizer_type,
+          type,
           device,
-          is_cls_ae = False):
+          ):
     model.to(device)
     model.train()
     optimizer = optimizer_type(model.parameters(), lr=learning_rate)
     losses = []
-    for _ in tqdm(range(epochs), desc="Training"):
-        if is_cls_ae:
-            train_loss = train_epoch_CLS(train_loader, model, optimizer, criterion, grad_clip, device)
-        else:   
-            train_loss = train_epoch_AE(train_loader, model, optimizer, criterion, grad_clip, device)
+    for epoch in tqdm(range(epochs), desc="Training", leave=False):
+        match type:
+            case 'cls':
+                trainer = train_epoch_CLS
+            case 'ae':
+                trainer = train_epoch_AE
+            case 'reg':
+                trainer = train_epoch_regressor
+            case _:
+                raise NotImplementedError(f"Type {type} not implemented")
+        train_loss = trainer(train_loader, model, optimizer, criterion, grad_clip, device)
         losses.append(train_loss)
-        tqdm.write(f"Epoch: {epoch}, Loss: {train_loss}")
+        # tqdm.write(f"Epoch: {epoch}, Loss: {train_loss}")
     
     return train_loss
 
@@ -132,8 +181,9 @@ def plot_train_losses(train_loader,
                       learning_rate,
                       optimizer_type,
                       save_path,
+                      type,
                       device,
-                      is_cls_ae = False):
+                      ):
     """
     Train a neural network model and display an interactive graph of training
     and validation losses.
@@ -182,10 +232,16 @@ def plot_train_losses(train_loader,
     scheduler = SqrtSched(optimizer)
     losses = []
     for _ in tqdm(range(epochs), desc="Training"):
-        if is_cls_ae:
-            train_loss = train_epoch_CLS(train_loader, model, optimizer, criterion, grad_clip, device)
-        else:   
-            train_loss = train_epoch_AE(train_loader, model, optimizer, criterion, grad_clip, device)
+        match type:
+            case 'ae':
+                trainer = train_epoch_AE
+            case 'cls':
+                trainer = train_epoch_CLS
+            case 'reg':
+                trainer = train_epoch_regressor
+            case _:
+                raise NotImplementedError(f"Type {type} not implemented")
+        train_loss = trainer(train_loader, model, optimizer, criterion, grad_clip, device)
         losses.append(train_loss)
         update_graph(train_loss, optimizer.param_groups[0]["lr"])
         scheduler.step()
@@ -194,3 +250,53 @@ def plot_train_losses(train_loader,
     plt.show()
 
     print(f"Training complete.\nModel final loss: {train_losses[-1]:.2f}")
+
+
+def optuna_train(
+  train_loader,
+  val_loader,
+  criterion,
+  optimizer_type,
+  n_epochs,
+  type,
+  n_trials,
+  device,      
+):
+    def objective(trial):
+        hyperparams = {}
+        hyperparams["lr"] = trial.suggest_float("lr", 1e-5, 1e-1)
+        hyperparams["grad_clip"] = trial.suggest_float("grad_clip", 0.1, 1)
+        hyperparams["hidden_size"] = trial.suggest_int("hidden_size", 1, 100)
+        hyperparams["bidirectional"] = trial.suggest_categorical("bidirectional", [True, False])
+        input_shape = train_loader.dataset.shape[1]
+
+        match type:
+            case 'ae':
+                model = LSTM_AE
+            case 'cls':
+                model = LSTM_AE_Classifier
+            case 'reg':
+                model = LSTM_Regressor
+            case _:
+                raise NotImplementedError(f"Type {type} not implemented")
+
+        model = model(input_shape, hyperparams["hidden_size"], bidirectional=hyperparams["bidirectional"])
+        model.to(device)
+        train(train_loader,
+              model,
+              criterion,
+              n_epochs,
+              hyperparams["grad_clip"],
+              hyperparams["lr"],
+              optimizer_type,
+              type,
+              device
+              )
+
+        val_loss, _ = evaluate(val_loader, model, criterion, type, device)
+        del model
+        return val_loss
+
+    study = optuna.create_study(direction="minimize")
+    study.optimize(objective, n_trials=n_trials)
+    return study.best_params

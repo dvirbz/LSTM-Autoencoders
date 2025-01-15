@@ -18,7 +18,7 @@ def plot_daily_max(df, stocks):
         sns.lineplot(data=df[df["symbol"] == stock], x="date", y="high")
     plt.show()    
     
-def preProcessData(df):
+def preprocess_data(df):
     # Clean Data
     df.dropna(inplace=True)
     df.drop(columns=["volume"], inplace=True)
@@ -36,22 +36,25 @@ def preProcessData(df):
     return dataset
 
 
-def SplitData(dataset):
+def split_data(dataset):
     N_samples, N_days, N_features = dataset.shape
+    print(f"{dataset.shape=}")
     dataset = torch.tensor(dataset, dtype=torch.float32)
     dataset = dataset.permute(1, 0, 2)
-    # dataset = transforms.Normalize(dataset.mean(), dataset.std())(dataset)
     train_data, test_data = train_test_split(dataset.detach().cpu(), test_size=0.2, shuffle=False)
     train_data, val_data = train_test_split(train_data, test_size=0.25, shuffle=False)
     
     transform = transforms.Compose([
         transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32).permute(1, 0, 2)),
+        # transforms.Lambda(lambda x: (x - x.mean(dim=1, keepdims=True)) / x.std(dim=1, keepdims=True)),
+        transforms.Lambda(lambda x: (x - x.min(dim=1, keepdims=True)[0]) / (x.max(dim=1, keepdims=True)[0] - x.min(dim=1, keepdims=True)[0]))
         ])
 
     train_data = transform(train_data)
-    # print(train_data[0])
     val_data = transform(val_data)
     test_data = transform(test_data)
+
+    print(f"{train_data.shape=}\n{val_data.shape=}\n{test_data.shape=}")
 
     return train_data, val_data, test_data
 
@@ -69,12 +72,12 @@ def main():
     # Targets: Open, High, Low, Close
     
     # print(df[df.isna().any(axis=1)])
-    dataset = preProcessData(df)
+    dataset = preprocess_data(df)
     N_samples, N_days, N_features = dataset.shape
     print(f"{N_samples=}, {N_days=}, {N_features=}")
     
     # Split the data
-    train_data, val_data, test_data = SplitData(dataset)    
+    train_data, val_data, test_data = split_data(dataset)    
     print(f"{train_data.shape=}, {val_data.shape=}, {test_data.shape=}")
     
     args = get_train_args()
@@ -110,10 +113,20 @@ def main():
     os.makedirs(plot_folder, exist_ok=True)
 
     #train
-    train_loss = plot_train_losses(train_loader, model, criterion, epochs, gradient_clip, lr, optimizer_type, plot_folder, device)
+    plot_train_losses(train_loader,
+                      model,
+                      criterion,
+                      epochs,
+                      gradient_clip,
+                      lr,
+                      optimizer_type,
+                      plot_folder,
+                      'ae',
+                      device,
+                      )
     
     #evaluate
-    test_loss, all_outputs = evaluate(test_loader, model, criterion, device)
+    test_loss, _ = evaluate(test_loader, model, criterion, device)
     print(f"Test loss: {test_loss}")
     #save model
     models_folder = "./models"
@@ -128,6 +141,7 @@ def main():
         if i == number_of_plots:
             break
         output = model(data.to(device))
+        
         open, high, low, close = data.squeeze().permute(1, 0).detach().cpu().numpy()
         pred_open, pred_high, pred_low, pred_close = output.squeeze().permute(1, 0).detach().cpu().numpy()
         plt.subplot(2, 2, 1)

@@ -55,7 +55,7 @@ def split_data(dataset):
 
     train_min, train_max = train_data.min(), train_data.max()
 
-    first_transform = transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32)) if args.auto_regressor
+    first_transform = transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32))
 
     transform = transforms.Compose([
         first_transform,

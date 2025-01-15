@@ -5,7 +5,9 @@ from torchvision import transforms
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import numpy as np
 from sklearn.model_selection import train_test_split
+from torch.utils.data import TensorDataset, DataLoader
 
 from argparser import get_train_args
 from lstm_AE import LSTM_AE, LSTM_AR
@@ -46,14 +48,17 @@ def split_data(dataset):
     N_samples, N_days, N_features = dataset.shape
     print(f"{dataset.shape=}")
     dataset = torch.tensor(dataset, dtype=torch.float32)
+
     # dataset = dataset.permute(1, 0, 2)
     train_data, test_data = train_test_split(dataset.detach().cpu(), test_size=0.2, shuffle=True)
     train_data, val_data = train_test_split(train_data, test_size=0.25, shuffle=True)
 
-    train_min, train_max = train_data.min(dim=1, keepdims=True), train_data.max(dim=1, keepdims=True)
+    train_min, train_max = train_data.min(), train_data.max()
+
+    first_transform = transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32)) if args.auto_regressor
+
     transform = transforms.Compose([
-        transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32)),#.permute(1, 0, 2)),
-        # transforms.Lambda(lambda x: (x - x.mean(dim=1, keepdims=True)) / x.std(dim=1, keepdims=True)),
+        first_transform,
         transforms.Lambda(lambda x: (x - train_min) / (train_max - train_min))
         ])
 
@@ -65,6 +70,42 @@ def split_data(dataset):
 
     return train_data, val_data, test_data
 
+def plot_ae(test_loader, model, number_of_plots=3):
+    i = 0
+    for data in test_loader:
+        if i == number_of_plots:
+            break
+        output = model(data)
+                
+        open, high, low, close = data.squeeze().permute(1, 0).detach().cpu().numpy()
+        pred_open, pred_high, pred_low, pred_close = output.squeeze().permute(1, 0).detach().cpu().numpy()
+        plt.subplot(2, 2, 1)
+        plt.plot(open, label="Open")
+        plt.plot(pred_open, label="Pred Open")
+        plt.legend()
+        
+        plt.subplot(2, 2, 2)
+        plt.plot(high, label="High")
+        plt.plot(pred_high, label="Pred High")
+        plt.legend()
+        
+        plt.subplot(2, 2, 3)
+        plt.plot(low, label="Low")
+        plt.plot(pred_low, label="Pred Low")
+        plt.legend()
+        
+        plt.subplot(2, 2, 4)
+        plt.plot(close, label="Close")
+        plt.plot(pred_close, label="Pred Close")
+        plt.legend()
+        plt.show()
+        i += 1
+
+def plot_ar(test_loader, model, number_of_plots=3):
+    i = 0
+    for data, target in test_loader:
+        x_hat, y_hat = model(data)
+        
 def main():
     data_path = "./data/"
     file_name = "sp500.csv"
@@ -80,14 +121,19 @@ def main():
     
     # print(df[df.isna().any(axis=1)])
     dataset = preprocess_data(df)
+    # if args.auto_regressor:
+    #     dataset, dataset_y = create_autoregressive_data(dataset)
+    
+    # # 1 1 1 1 1 1 0 0 1 0 1 0 1 1 0 0 1 0 1
+    # # 1 1 1 1 1 0 0 1 0 1 0 1 1 0 0 1 0 1
     N_samples, N_days, N_features = dataset.shape
     print(f"{N_samples=}, {N_days=}, {N_features=}")
+    args = get_train_args()
     
     # Split the data
     train_data, val_data, test_data = split_data(dataset)    
     print(f"{train_data.shape=}, {val_data.shape=}, {test_data.shape=}")
     
-    args = get_train_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
@@ -106,14 +152,20 @@ def main():
     epochs = args.epochs
     
     if args.auto_regressor:
-        train_data = create_autoregressive_data(train_data)
-        val_data = create_autoregressive_data(val_data)
-        test_data = create_autoregressive_data(test_data)
+        X_train, y_train = create_autoregressive_data(train_data)
+        train_data = TensorDataset(X_train, y_train)
+        
+        X_val, y_val = create_autoregressive_data(val_data)
+        val_data = TensorDataset(X_val, y_val)
+        
+        X_test, y_test = create_autoregressive_data(test_data)
+        test_data = TensorDataset(X_test, y_test)
+        
     #create data loaders
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size)
-    test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size)
-    test_loader1 = torch.utils.data.DataLoader(test_data, batch_size=1)
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_data, batch_size=batch_size)
+    test_loader = DataLoader(test_data, batch_size=batch_size)
+    test_loader1 = DataLoader(test_data, batch_size=1)
 
     #create model
     if args.auto_regressor:
@@ -153,10 +205,17 @@ def main():
     number_of_plots = 3
     i = 0
     #plot some outputs pairs
+    
+        
     for data in test_loader1:
         if i == number_of_plots:
             break
+        if args.auto_regressor:
+            data, target = data
         output = model(data.to(device))
+        if args.auto_regressor:
+            x_hat, y_hat = output
+        print(f"{type(output)=}, {type(data)=}")
         
         open, high, low, close = data.squeeze().permute(1, 0).detach().cpu().numpy()
         pred_open, pred_high, pred_low, pred_close = output.squeeze().permute(1, 0).detach().cpu().numpy()

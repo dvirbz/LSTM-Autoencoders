@@ -7,6 +7,7 @@ import optuna
 from torch.nn.functional import one_hot
 from torch.optim.lr_scheduler import _LRScheduler
 from tqdm import tqdm
+from sklearn.model_selection import train_test_split
 
 from lstm_AE import LSTM_AE, LSTM_AE_Classifier, LSTM_AR
 
@@ -124,8 +125,11 @@ def evaluate_regressor(val_loader, model, criterion, device):
         for data, targets in val_loader:
             targets = targets.to(device)
             data = data.float().to(device)
-            x_hat, y_hat = model(data)
-            loss = criterion(data, x_hat) + criterion(targets, y_hat)
+            first_data, second_data = train_test_split(data, test_size=0.5, shuffle=False)
+            second_data_hat = model.generate(first_data, second_data.shape[1])
+            ar_loss = criterion(second_data, second_data_hat)
+            ae_loss = criterion(data, model(data)[0])
+            loss = ar_loss + ae_loss
             accumulative_loss += loss.item()
 
     total_loss = accumulative_loss / len(val_loader)

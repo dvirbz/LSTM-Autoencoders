@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 class LSTM_AE(nn.Module):
@@ -124,3 +125,15 @@ class LSTM_AR(nn.Module):
         x_hat, _ = self.decoder(z)
         y_hat, _ = self.regressor(z)
         return x_hat, y_hat
+    
+    def generate(self, x, N):
+        input_x = x
+        preds = torch.zeros(x.shape[0], N, x.shape[2])
+        for i in range(N):
+            z, _ = self.encoder(input_x)
+            y_hat, _ = self.regressor(z)
+            preds[:, i, :] = y_hat[:, -1, :]
+            input_x = torch.cat((input_x, y_hat[:, -1, :]), dim=1)
+
+        return preds
+                    

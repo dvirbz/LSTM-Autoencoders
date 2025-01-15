@@ -59,7 +59,7 @@ def split_data(dataset):
 
     transform = transforms.Compose([
         first_transform,
-        transforms.Lambda(lambda x: (x - train_min) / (train_max - train_min))
+        transforms.Normalize((train_min,), (train_max - train_min,)),
         ])
 
     train_data = transform(train_data)
@@ -101,10 +101,46 @@ def plot_ae(test_loader, model, number_of_plots=3):
         plt.show()
         i += 1
 
-def plot_ar(test_loader, model, number_of_plots=3):
+def plot_ar(test_loader, model, number_of_plots=3, device="cuda"):
     i = 0
-    for data, target in test_loader:
-        x_hat, y_hat = model(data)
+    for data, targets in test_loader:
+        if i == number_of_plots:
+            break
+        data = data.permute(1, 0, 2).to(device)
+        first_data, second_data = train_test_split(data, test_size=0.5, shuffle=False)
+        first_data = first_data.permute(1, 0, 2).to(device)
+        second_data = second_data.permute(1, 0, 2).to(device)
+        second_data_hat = model.generate(first_data, second_data.shape[1]).to(device)
+        # second_data = second_data.detach().cpu().numpy()
+        # second_data_hat = second_data_hat.detach().cpu().numpy()
+        true_data = torch.cat((first_data, second_data), dim=1)
+        pred_data = torch.cat((first_data, second_data_hat), dim=1)
+        open, high, low, close = true_data.squeeze().permute(1, 0).detach().cpu().numpy()
+        pred_open, pred_high, pred_low, pred_close = pred_data.squeeze().permute(1, 0).detach().cpu().numpy()
+        
+        plt.subplot(2, 2, 1)
+        plt.plot(open, label="Open")
+        plt.plot(pred_open, label="Pred Open")
+        plt.legend()
+        
+        plt.subplot(2, 2, 2)
+        plt.plot(high, label="High")
+        plt.plot(pred_high, label="Pred High")
+        plt.legend()
+        
+        plt.subplot(2, 2, 3)
+        plt.plot(low, label="Low")
+        plt.plot(pred_low, label="Pred Low")
+        plt.legend()
+        
+        plt.subplot(2, 2, 4)
+        plt.plot(close, label="Close")
+        plt.plot(pred_close, label="Pred Close")
+        plt.legend()
+        
+        plt.show()
+        i += 1
+
         
 def main():
     data_path = "./data/"
@@ -203,43 +239,10 @@ def main():
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
     
     number_of_plots = 3
-    i = 0
-    #plot some outputs pairs
-    
-        
-    for data in test_loader1:
-        if i == number_of_plots:
-            break
-        if args.auto_regressor:
-            data, target = data
-        output = model(data.to(device))
-        if args.auto_regressor:
-            x_hat, y_hat = output
-        print(f"{type(output)=}, {type(data)=}")
-        
-        open, high, low, close = data.squeeze().permute(1, 0).detach().cpu().numpy()
-        pred_open, pred_high, pred_low, pred_close = output.squeeze().permute(1, 0).detach().cpu().numpy()
-        plt.subplot(2, 2, 1)
-        plt.plot(open, label="Open")
-        plt.plot(pred_open, label="Pred Open")
-        plt.legend()
-        
-        plt.subplot(2, 2, 2)
-        plt.plot(high, label="High")
-        plt.plot(pred_high, label="Pred High")
-        plt.legend()
-        
-        plt.subplot(2, 2, 3)
-        plt.plot(low, label="Low")
-        plt.plot(pred_low, label="Pred Low")
-        plt.legend()
-        
-        plt.subplot(2, 2, 4)
-        plt.plot(close, label="Close")
-        plt.plot(pred_close, label="Pred Close")
-        plt.legend()
-        plt.show()
-        i += 1
+    if not args.auto_regressor:
+        plot_ae(test_loader1, model, number_of_plots)
+    else:
+        plot_ar(test_loader1, model, number_of_plots)
         
 if __name__ == "__main__":
     main()

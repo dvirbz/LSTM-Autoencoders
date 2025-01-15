@@ -124,9 +124,11 @@ def evaluate_regressor(val_loader, model, criterion, device):
     with torch.no_grad():
         for data, targets in val_loader:
             targets = targets.to(device)
-            data = data.float().to(device)
+            data = data.float().to(device).permute(1, 0, 2)
             first_data, second_data = train_test_split(data, test_size=0.5, shuffle=False)
-            second_data_hat = model.generate(first_data, second_data.shape[1])
+            first_data = first_data.to(device).permute(1, 0, 2)
+            second_data = second_data.to(device).permute(1, 0, 2)
+            second_data_hat = model.generate(first_data, second_data.shape[1]).to(device)
             ar_loss = criterion(second_data, second_data_hat)
             ae_loss = criterion(data, model(data)[0])
             loss = ar_loss + ae_loss

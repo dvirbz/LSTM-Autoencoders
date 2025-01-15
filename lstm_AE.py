@@ -133,7 +133,8 @@ class LSTM_AR(nn.Module):
             z, _ = self.encoder(input_x)
             y_hat, _ = self.regressor(z)
             preds[:, i, :] = y_hat[:, -1, :]
-            input_x = torch.cat((input_x, y_hat[:, -1, :]), dim=1)
+            # print(f"{input_x.shape=}, {y_hat[:, -1, :].unsqueeze(1).shape=}, {preds[:, i, :].shape=}, {preds.shape=}, {y_hat.shape=}")
+            input_x = torch.cat((input_x, y_hat[:, -1, :].unsqueeze(1)), dim=1)
 
         return preds
                     

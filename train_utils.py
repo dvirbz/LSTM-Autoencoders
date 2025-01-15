@@ -8,7 +8,8 @@ from torch.nn.functional import one_hot
 from torch.optim.lr_scheduler import _LRScheduler
 from tqdm import tqdm
 
-from lstm_AE import LSTM_AE, LSTM_AE_Classifier, LSTM_Regressor
+from lstm_AE import LSTM_AE, LSTM_AE_Classifier, LSTM_AR
+
 
 class SqrtSched(_LRScheduler):
     def __init__(self, optimizer, last_epoch=-1, verbose="deprecated"):
@@ -130,17 +131,24 @@ def evaluate_regressor(val_loader, model, criterion, device):
     total_loss = accumulative_loss / len(val_loader)
     return total_loss, None
 
-def evaluate(val_loader, model, criterion, type, device):
-    match type:
-        case 'ae':
-            evaluator = evaluate_AE
-        case 'cls':
-            evaluator = evaluate_CLS
-        case 'reg':
-            evaluator = evaluate_regressor
-        case _:
-            raise NotImplementedError(f"Type {type} not implemented")
+MODELS = {
+    'ae' : {'MODEL' : LSTM_AE,
+            'TRAINER' : train_epoch_AE,
+            'EVALUATOR' : evaluate_AE
+            },
+    'cls' : {'MODEL' : LSTM_AE_Classifier,
+             'TRAINER' : train_epoch_CLS,
+             'EVALUATOR' : evaluate_CLS
+            },
+    'ar' : {'MODEL' : LSTM_AR,
+            'TRAINER' : train_epoch_regressor,
+            'EVALUATOR' : evaluate_regressor
+            },
+}
 
+
+def evaluate(val_loader, model, criterion, type, device):
+    evaluator = MODELS[type]['EVALUATOR']
     return evaluator(val_loader, model, criterion, device)
 
 def train(train_loader,
@@ -158,15 +166,7 @@ def train(train_loader,
     optimizer = optimizer_type(model.parameters(), lr=learning_rate)
     losses = []
     for epoch in tqdm(range(epochs), desc="Training", leave=False):
-        match type:
-            case 'cls':
-                trainer = train_epoch_CLS
-            case 'ae':
-                trainer = train_epoch_AE
-            case 'reg':
-                trainer = train_epoch_regressor
-            case _:
-                raise NotImplementedError(f"Type {type} not implemented")
+        trainer = MODELS[type]['TRAINER']
         train_loss = trainer(train_loader, model, optimizer, criterion, grad_clip, device)
         losses.append(train_loss)
         # tqdm.write(f"Epoch: {epoch}, Loss: {train_loss}")
@@ -232,15 +232,7 @@ def plot_train_losses(train_loader,
     scheduler = SqrtSched(optimizer)
     losses = []
     for _ in tqdm(range(epochs), desc="Training"):
-        match type:
-            case 'ae':
-                trainer = train_epoch_AE
-            case 'cls':
-                trainer = train_epoch_CLS
-            case 'reg':
-                trainer = train_epoch_regressor
-            case _:
-                raise NotImplementedError(f"Type {type} not implemented")
+        trainer = MODELS[type]['TRAINER']
         train_loss = trainer(train_loader, model, optimizer, criterion, grad_clip, device)
         losses.append(train_loss)
         update_graph(train_loss, optimizer.param_groups[0]["lr"])
@@ -270,16 +262,7 @@ def optuna_train(
         hyperparams["hidden_size"] = trial.suggest_int("hidden_size", 1, hidden_size_limit)
         input_shape = train_loader.dataset.shape[1]
 
-        match type:
-            case 'ae':
-                model = LSTM_AE
-            case 'cls':
-                model = LSTM_AE_Classifier
-            case 'reg':
-                model = LSTM_Regressor
-            case _:
-                raise NotImplementedError(f"Type {type} not implemented")
-
+        model = MODELS[type]['MODEL']
         model = model(input_shape, hyperparams["hidden_size"], bidirectional=False)
         model.to(device)
         train(train_loader,

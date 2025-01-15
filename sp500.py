@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 
 from argparser import get_train_args
-from lstm_AE import LSTM_AE
+from lstm_AE import LSTM_AE, LSTM_AR
 from train_utils import evaluate, plot_train_losses
 
 def plot_daily_max(df, stocks):
@@ -35,19 +35,26 @@ def preprocess_data(df):
     dataset = df_pivot.values.reshape(len(df_pivot), max_days, 4)
     return dataset
 
+def create_autoregressive_data(data):
+    # Create an autoregressive dataset
+    # assuming shpae is (Batches, Sequence Length, Features) - (B, Amount of Days, 4)
+    y = data[:, 1:, :]
+    X = data[:, :-1, :]
+    return torch.tensor(X), torch.tensor(y)
 
 def split_data(dataset):
     N_samples, N_days, N_features = dataset.shape
     print(f"{dataset.shape=}")
     dataset = torch.tensor(dataset, dtype=torch.float32)
-    dataset = dataset.permute(1, 0, 2)
-    train_data, test_data = train_test_split(dataset.detach().cpu(), test_size=0.2, shuffle=False)
-    train_data, val_data = train_test_split(train_data, test_size=0.25, shuffle=False)
-    
+    # dataset = dataset.permute(1, 0, 2)
+    train_data, test_data = train_test_split(dataset.detach().cpu(), test_size=0.2, shuffle=True)
+    train_data, val_data = train_test_split(train_data, test_size=0.25, shuffle=True)
+
+    train_min, train_max = train_data.min(dim=1, keepdims=True), train_data.max(dim=1, keepdims=True)
     transform = transforms.Compose([
-        transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32).permute(1, 0, 2)),
+        transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32)),#.permute(1, 0, 2)),
         # transforms.Lambda(lambda x: (x - x.mean(dim=1, keepdims=True)) / x.std(dim=1, keepdims=True)),
-        transforms.Lambda(lambda x: (x - x.min(dim=1, keepdims=True)[0]) / (x.max(dim=1, keepdims=True)[0] - x.min(dim=1, keepdims=True)[0]))
+        transforms.Lambda(lambda x: (x - train_min) / (train_max - train_min))
         ])
 
     train_data = transform(train_data)
@@ -98,13 +105,21 @@ def main():
     gradient_clip = args.grad_clip
     epochs = args.epochs
     
+    if args.auto_regressor:
+        train_data = create_autoregressive_data(train_data)
+        val_data = create_autoregressive_data(val_data)
+        test_data = create_autoregressive_data(test_data)
     #create data loaders
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size)
     test_loader1 = torch.utils.data.DataLoader(test_data, batch_size=1)
+
     #create model
-    model = LSTM_AE(N_features, hidden_size, bidirectional=args.bidirectional)
+    if args.auto_regressor:
+        model = LSTM_AR(N_features, hidden_size, bidirectional=args.bidirectional)
+    else:
+        model = LSTM_AE(N_features, hidden_size, bidirectional=args.bidirectional)
     print(model)
     
    
@@ -112,6 +127,7 @@ def main():
     plot_folder = "./plots/SP500"
     os.makedirs(plot_folder, exist_ok=True)
 
+    session_type = 'ae' if not args.auto_regressor else 'ar'
     #train
     plot_train_losses(train_loader,
                       model,
@@ -121,12 +137,12 @@ def main():
                       lr,
                       optimizer_type,
                       plot_folder,
-                      'ae',
+                      session_type,
                       device,
                       )
     
     #evaluate
-    test_loss, _ = evaluate(test_loader, model, criterion, device)
+    test_loss, _ = evaluate(test_loader, model, criterion, session_type, device)
     print(f"Test loss: {test_loss}")
     #save model
     models_folder = "./models"

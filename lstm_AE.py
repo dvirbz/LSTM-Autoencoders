@@ -96,7 +96,7 @@ class LSTM_AE_Classifier(nn.Module):
         cls = self.fc(h_n.squeeze(0))
         return x_hat, cls
 
-class LSTM_Regressor(nn.Module):
+class LSTM_AR(nn.Module):
     def __init__(self, input_size, hidden_size, bidirectional=True):
         """
         Initializes the LSTM Autoencoder model.

@@ -231,11 +231,11 @@ def plot_train_losses(train_loader,
 
     # Add a text box for learning rate
     for a in axis:
-        lr_text = a.text(0.1, 0.95, '', transform=a.transAxes)
         if a == axis[0]:
+            lr_text = a.text(0.1, 0.95, '', transform=a.transAxes)
             loss_text = a.text(0.1, 0.85, '', transform=a.transAxes)
         else:
-            acc_text = a.text(0.1, 0.75, '', transform=a.transAxes)
+            acc_text = a.text(0.1, 0.95, '', transform=a.transAxes)
 
     # Helper function to update the graph
     def update_graph(train_loss, train_acc, learning_rate):
@@ -301,9 +301,9 @@ def optuna_train(
         hyperparams["grad_clip"] = trial.suggest_categorical("grad_clip", np.arange(0.1, 2.1, 0.1))
         hyperparams["hidden_size"] = trial.suggest_int("hidden_size", 1, hidden_size_limit)
         if model_type == 'cls' or model_type == 'ar':
-            input_shape = train_loader.dataset.data.shape[1]
+            input_shape = [input.shape[2] for input, _ in train_loader][0]
         else:
-            input_shape = train_loader.dataset.shape[1]
+            input_shape = train_loader.dataset.shape[2]
 
         model = MODELS[model_type]['MODEL']
         if model_type == 'cls':

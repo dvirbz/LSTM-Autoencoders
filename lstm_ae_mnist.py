@@ -17,6 +17,11 @@ def main():
     print(f"Using device: {device}")
     args = get_train_args()
 
+    mnist_train = datasets.MNIST(root="./data", train=True, download=True)
+    mnist_test = datasets.MNIST(root="./data", train=False, download=True)
+    train_mean = torch.mean(mnist_train.data.float())
+    train_std = torch.std(mnist_train.data.float())
+
     transformations = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,)),
@@ -27,11 +32,12 @@ def main():
         transformations = transforms.Compose(transformations.transforms +
                                              [transforms.Lambda(lambda x: x.view(-1, 1))])
 
-    mnist_train = datasets.MNIST(root="./data", train=True, download=True, transform=transformations)
-    mnist_test = datasets.MNIST(root="./data", train=False, download=True, transform=transformations)
     _, n_rows_og, n_features_og = mnist_train.data.shape
     n_rows = n_rows_og if not args.pixel_wise else n_rows_og * n_features_og
     n_features = n_features_og if not args.pixel_wise else 1
+
+    mnist_train.transform = transformations
+    mnist_test.transform = transformations
 
     best_params = None
     
@@ -45,14 +51,12 @@ def main():
 
     if args.hyper_search:
         op_train, op_val = random_split(mnist_train, [int(len(mnist_train) * 0.8), len(mnist_train) - int(len(mnist_train) * 0.8)])
-        # op_train.dataset.data = torch.Tensor(op_train.dataset.data)
-        # op_train.dataset.targets = torch.Tensor(op_train.dataset.targets)
-        # op_val.dataset.data = torch.Tensor(op_val.dataset.data)
-        # op_val.dataset.targets = torch.Tensor(op_val.dataset.targets)
         op_train = op_train.dataset
         op_val = op_val.dataset
+        op_train.transform = transformations
+        op_val.transform = transformations
         trial_epochs = args.trial_epochs if args.trial_epochs else 50
-        hidden_size_limit = n_features // 2
+        hidden_size_limit = 128
         best_params = optuna_train(DataLoader(op_train, batch_size=batch_size, shuffle=True),
                                    DataLoader(op_val, batch_size=batch_size),
                                    criterion,
@@ -80,7 +84,7 @@ def main():
     print(model)
 
     # Make sure correct plot folder exits
-    pixel_wise = "_Pixel_wise" if args.pixel_wise else ""
+    pixel_wise = "_pixel_wise" if args.pixel_wise else ""
     plot_folder = "./plots/MNIST"
     os.makedirs(plot_folder, exist_ok=True)
     plot_train_losses(train_loader,
@@ -100,13 +104,13 @@ def main():
     
     #evaluate
     test_loss, accuracy = evaluate(test_loader, model, criterion, 'cls', device)
-    print(f"Test loss: {test_loss}")
+    print(f"Test Loss: {test_loss}, Test Accuracy: {accuracy}")
     test_loss = np.round(test_loss, 4)
 
     #save model
     models_folder = "./models"
     os.makedirs(models_folder, exist_ok=True)
-    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{pixel_wise=}"
+    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{pixel_wise}"
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
     n_digits_to_plot = 3
     #plot some outputs pairs
@@ -127,7 +131,7 @@ def main():
         ax[1].set_title(f"Predicted digit {predicted_digit}")
         ax[0].set_axis_off()
         ax[1].set_axis_off()
-        plt.savefig(f"./plots/{model_name}_digit_{int(target)}.png")
+        plt.savefig(f"./plots/MNIST/{model_name}_digit_{int(target)}.png")
         if len(plotted_digits) == n_digits_to_plot:
             break
         

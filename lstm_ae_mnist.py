@@ -6,11 +6,11 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split, Dataset
 
 from argparser import get_train_args
 from lstm_AE import LSTM_AE_Classifier
-from train_utils import train, evaluate, plot_train_losses
+from train_utils import optuna_train, evaluate, plot_train_losses
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -32,18 +32,42 @@ def main():
     _, n_rows_og, n_features_og = mnist_train.data.shape
     n_rows = n_rows_og if not args.pixel_wise else n_rows_og * n_features_og
     n_features = n_features_og if not args.pixel_wise else 1
-    print(f"{n_rows=}, {n_features=}")
+
+    best_params = None
+    
 
     #criterion
     criterion = nn.MSELoss()
 
     optimizer_type = optim.Adam if args.optimizer == "adam" else optim.SGD
-
-    #grid search
     batch_size = args.batch_size
+
+
+    if args.hyper_search:
+        op_train, op_val = random_split(mnist_train, [int(len(mnist_train) * 0.8), len(mnist_train) - int(len(mnist_train) * 0.8)])
+        # op_train.dataset.data = torch.Tensor(op_train.dataset.data)
+        # op_train.dataset.targets = torch.Tensor(op_train.dataset.targets)
+        # op_val.dataset.data = torch.Tensor(op_val.dataset.data)
+        # op_val.dataset.targets = torch.Tensor(op_val.dataset.targets)
+        op_train = op_train.dataset
+        op_val = op_val.dataset
+        trial_epochs = args.trial_epochs if args.trial_epochs else 50
+        hidden_size_limit = n_features // 2
+        best_params = optuna_train(DataLoader(op_train, batch_size=batch_size, shuffle=True),
+                                   DataLoader(op_val, batch_size=batch_size),
+                                   criterion,
+                                   optimizer_type,
+                                   trial_epochs,
+                                   'cls',
+                                   args.n_trials,
+                                   hidden_size_limit,
+                                   device,
+                                   )
+
     hidden_size = n_features // 2 if args.hidden_size == 'half' else int(args.hidden_size)
-    lr = args.lr
-    gradient_clip = args.grad_clip
+    hidden_size = best_params["hidden_size"] if best_params else hidden_size
+    lr = best_params["lr"] if best_params else args.lr
+    gradient_clip = best_params["grad_clip"] if best_params else args.grad_clip
     epochs = args.epochs
         
     #create data loaders
@@ -52,7 +76,6 @@ def main():
     test_loader = DataLoader(mnist_test, batch_size=batch_size)
     
     #create model
-    # model = LSTM_AE(n_features, hidden_size, bidirectional=args.bidirectional)
     model = LSTM_AE_Classifier(n_features, hidden_size, len(np.unique(mnist_train.targets)) ,bidirectional=args.bidirectional)
     print(model)
 
@@ -70,19 +93,20 @@ def main():
                       f'{plot_folder}/'+ pixel_wise,
                       'cls',
                       device,
+                      True,
                       )
 
 
     
     #evaluate
-    test_loss, accuracy = evaluate(test_loader, model, criterion, device, is_cls_ae=True)
+    test_loss, accuracy = evaluate(test_loader, model, criterion, 'cls', device)
     print(f"Test loss: {test_loss}")
     test_loss = np.round(test_loss, 4)
 
     #save model
     models_folder = "./models"
     os.makedirs(models_folder, exist_ok=True)
-    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{'_FromGridSearch' if do_grid_search else ''}{pixel_wise}"
+    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{pixel_wise=}"
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
     n_digits_to_plot = 3
     #plot some outputs pairs

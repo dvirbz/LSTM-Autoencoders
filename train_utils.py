@@ -114,7 +114,6 @@ def evaluate_CLS(val_loader, model, criterion, device):
             accumulative_loss += loss.item()
 
     accuracy = (torch.tensor(labels) == torch.tensor(preds)).sum().item() / len(labels)
-    print(f"{accuracy=}")
     total_loss = accumulative_loss / len(val_loader)
     return total_loss, accuracy
 
@@ -138,23 +137,26 @@ def evaluate_regressor(val_loader, model, criterion, device):
     return total_loss, None
 
 MODELS = {
-    'ae' : {'MODEL' : LSTM_AE,
+    'ae' : {
+            'MODEL' : LSTM_AE,
             'TRAINER' : train_epoch_AE,
             'EVALUATOR' : evaluate_AE
             },
-    'cls' : {'MODEL' : LSTM_AE_Classifier,
+    'cls' : {
+            'MODEL' : LSTM_AE_Classifier,
              'TRAINER' : train_epoch_CLS,
              'EVALUATOR' : evaluate_CLS
             },
-    'ar' : {'MODEL' : LSTM_AR,
+    'ar' : {
+            'MODEL' : LSTM_AR,
             'TRAINER' : train_epoch_regressor,
             'EVALUATOR' : evaluate_regressor
             },
 }
 
 
-def evaluate(val_loader, model, criterion, type, device):
-    evaluator = MODELS[type]['EVALUATOR']
+def evaluate(val_loader, model, criterion, model_type, device):
+    evaluator = MODELS[model_type]['EVALUATOR']
     return evaluator(val_loader, model, criterion, device)
 
 def train(train_loader,
@@ -164,7 +166,7 @@ def train(train_loader,
           grad_clip,
           learning_rate,
           optimizer_type,
-          type,
+          model_type,
           device,
           ):
     model.to(device)
@@ -172,7 +174,7 @@ def train(train_loader,
     optimizer = optimizer_type(model.parameters(), lr=learning_rate)
     losses = []
     for epoch in tqdm(range(epochs), desc="Training", leave=False):
-        trainer = MODELS[type]['TRAINER']
+        trainer = MODELS[model_type]['TRAINER']
         train_loss = trainer(train_loader, model, optimizer, criterion, grad_clip, device)
         losses.append(train_loss)
         # tqdm.write(f"Epoch: {epoch}, Loss: {train_loss}")
@@ -187,8 +189,9 @@ def plot_train_losses(train_loader,
                       learning_rate,
                       optimizer_type,
                       save_path,
-                      type,
+                      model_type,
                       device,
+                      with_accuracy=False,
                       ):
     """
     Train a neural network model and display an interactive graph of training
@@ -207,41 +210,72 @@ def plot_train_losses(train_loader,
     """
     # Initialize variables to store losses
     train_losses = []
+    train_accs = []
     # Prepare the interactive plot
-    _, ax = plt.subplots()
-    ax.set_xlabel('Epoch')
-    ax.set_ylabel('Loss')
-    ax.set_title('Training and Validation Loss')
-    train_line, = ax.plot([], [], label='Train Loss', color='blue')
-    val_line, = ax.plot([], [], label='Validation Loss', color='orange')
-    plt.legend()
+    if with_accuracy:
+        _, ax = plt.subplots(2, figsize=(9, 9))
+        axis = ax
+    else:
+        _, ax = plt.subplots()
+        axis = [ax]
+    for a in axis:
+        if a == axis[0]:
+            a.set_xlabel('Epoch')
+            a.set_ylabel('Loss')
+            a.set_title('Training Loss')
+            train_line, = a.plot([], [], label='Train Loss', color='blue')
+        else:
+            a.set_ylabel('Accuracy')
+            a.set_title('Training Accuracy')
+            acc_line, = a.plot([], [], label='Train Accuracy', color='blue')
 
     # Add a text box for learning rate
-    lr_text = ax.text(0.1, 0.95, '', transform=ax.transAxes)
-    loss_text = ax.text(0.1, 0.85, '', transform=ax.transAxes)
+    for a in axis:
+        lr_text = a.text(0.1, 0.95, '', transform=a.transAxes)
+        if a == axis[0]:
+            loss_text = a.text(0.1, 0.85, '', transform=a.transAxes)
+        else:
+            acc_text = a.text(0.1, 0.75, '', transform=a.transAxes)
 
     # Helper function to update the graph
-    def update_graph(train_loss, learning_rate):
+    def update_graph(train_loss, train_acc, learning_rate):
         train_losses.append(train_loss)
+        if with_accuracy:
+            train_accs.append(train_acc)
         train_line.set_data(range(1, len(train_losses) + 1), train_losses)
-        ax.relim()
-        ax.autoscale_view()
+        if with_accuracy:
+            acc_line.set_data(range(1, len(train_accs) + 1), train_accs)
+        for a in axis:
+            a.relim()
+            a.autoscale_view()
         loss_text.set_text(f'Train Loss: {train_loss:.4f}')
+        if with_accuracy:
+            acc_text.set_text(f'Train Accuracy: {train_acc:.4f}')
         lr_text.set_text(f'Learning Rate: {learning_rate:.5e}')
         plt.draw()
         plt.pause(0.01)
 
     model.to(device)
     model.train()
+    train_acc = None
+
     optimizer = optimizer_type(model.parameters(), lr=learning_rate)
     print(f"Optimizer: {optimizer}")
     scheduler = SqrtSched(optimizer)
     losses = []
     for _ in tqdm(range(epochs), desc="Training"):
-        trainer = MODELS[type]['TRAINER']
+        trainer = MODELS[model_type]['TRAINER']
         train_loss = trainer(train_loader, model, optimizer, criterion, grad_clip, device)
         losses.append(train_loss)
-        update_graph(train_loss, optimizer.param_groups[0]["lr"])
+        if with_accuracy:
+            # data = train_loader.dataset.data.to(device).to(torch.float32)
+            # pred = torch.argmax(model(data)[1], dim=1)
+            # targets = train_loader.dataset.targets.to(device)
+            # tqdm.write(f"{pred=}, {targets=}")
+            # train_acc = (pred == targets).to(torch.float32).mean().item()
+            train_acc = evaluate(train_loader, model, criterion, model_type, device)[1]
+            model.train()
+        update_graph(train_loss, train_acc, optimizer.param_groups[0]["lr"])
         scheduler.step()
 
     plt.savefig(f'{save_path}_loss_plots.png')
@@ -256,20 +290,26 @@ def optuna_train(
   criterion,
   optimizer_type,
   n_epochs,
-  type,
+  model_type,
   n_trials,
   hidden_size_limit,
   device,
 ):
     def objective(trial):
         hyperparams = {}
-        hyperparams["lr"] = trial.suggest_categorical("lr", np.logspace(-4, -1, num=100))
-        hyperparams["grad_clip"] = trial.suggest_categorical("grad_clip", np.arange(0.1, 1.1, 0.1))
+        hyperparams["lr"] = trial.suggest_categorical("lr", np.logspace(-4, -2, num=10))
+        hyperparams["grad_clip"] = trial.suggest_categorical("grad_clip", np.arange(0.1, 2.1, 0.1))
         hyperparams["hidden_size"] = trial.suggest_int("hidden_size", 1, hidden_size_limit)
-        input_shape = train_loader.dataset.shape[1]
+        if model_type == 'cls' or model_type == 'ar':
+            input_shape = train_loader.dataset.data.shape[1]
+        else:
+            input_shape = train_loader.dataset.shape[1]
 
-        model = MODELS[type]['MODEL']
-        model = model(input_shape, hyperparams["hidden_size"], bidirectional=False)
+        model = MODELS[model_type]['MODEL']
+        if model_type == 'cls':
+            model = model(input_shape, hyperparams["hidden_size"], len(np.unique(train_loader.dataset.targets)), bidirectional=False)
+        else:
+            model = model(input_shape, hyperparams["hidden_size"], bidirectional=False)
         model.to(device)
         train(train_loader,
               model,
@@ -278,12 +318,14 @@ def optuna_train(
               hyperparams["grad_clip"],
               hyperparams["lr"],
               optimizer_type,
-              type,
+              model_type,
               device
               )
 
-        val_loss, _ = evaluate(val_loader, model, criterion, type, device)
+        val_loss, accuracy = evaluate(val_loader, model, criterion, model_type, device)
         del model
+        if model_type == 'cls':
+            return 1 - accuracy
         return val_loss
 
     study = optuna.create_study(direction="minimize")

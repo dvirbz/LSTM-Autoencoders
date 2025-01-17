@@ -14,11 +14,16 @@ from argparser import get_train_args
 from lstm_AE import LSTM_AE, LSTM_AR
 from train_utils import evaluate, plot_train_losses, optuna_train
 
-def plot_daily_max(df, stocks):
-    plt.figure(figsize=(12, 8))
+def plot_daily_max(df, stocks, save_path):
+    plt.figure(figsize=(12, 10))
+    os.makedirs(save_path, exist_ok=True)
     for stock in stocks:
         plt.subplot(len(stocks), 1, stocks.index(stock) + 1)
-        sns.lineplot(data=df[df["symbol"] == stock], x="date", y="high")
+        ax = sns.lineplot(data=df[df["symbol"] == stock], x="date", y="high")
+        ax.set_xlabel("Date", fontsize=14)
+        ax.set_ylabel("High", fontsize=14)
+        plt.title(f"{stock} Daily High", fontsize=16)
+    plt.savefig(f'{save_path}/daily_max.png')
     plt.show()    
     
 def preprocess_data(df):
@@ -128,24 +133,41 @@ def plot_ar(test_loader, model, number_of_plots=3, device="cuda", save_path= "./
         open, high, low, close = data.squeeze().permute(1, 0).detach().cpu().numpy()
         pred_open, pred_high, pred_low, pred_close = pred_data.squeeze().permute(1, 0).detach().cpu().numpy()
         
+        plt.figure(figsize=(16, 16))
         plt.subplot(2, 2, 1)
         plt.plot(open, label="Open")
         plt.plot(pred_open, label="Pred Open")
+        plt.axvline(first_data.shape[1], color='r', linestyle='--')
+        plt.title("Open")
+        plt.xlabel("Days")
+        plt.ylabel("Price")
         plt.legend()
         
         plt.subplot(2, 2, 2)
         plt.plot(high, label="High")
         plt.plot(pred_high, label="Pred High")
+        plt.axvline(first_data.shape[1], color='r', linestyle='--')
+        plt.title("High")
+        plt.xlabel("Days")
+        plt.ylabel("Price")
         plt.legend()
         
         plt.subplot(2, 2, 3)
         plt.plot(low, label="Low")
         plt.plot(pred_low, label="Pred Low")
+        plt.axvline(first_data.shape[1], color='r', linestyle='--')
+        plt.title("Low")
+        plt.xlabel("Days")
+        plt.ylabel("Price")
         plt.legend()
         
         plt.subplot(2, 2, 4)
         plt.plot(close, label="Close")
         plt.plot(pred_close, label="Pred Close")
+        plt.axvline(first_data.shape[1], color='r', linestyle='--')
+        plt.title("Close")
+        plt.xlabel("Days")
+        plt.ylabel("Price")
         plt.legend()
         
         plt.savefig(f"{save_path}/AR_plot_{i}.png")
@@ -160,19 +182,10 @@ def main():
     df = pd.read_csv(file_path)
     df["date"] = pd.to_datetime(df["date"])
 
-    # plot_daily_max(df, ["AMZN", "GOOGL"])
+    # plot_daily_max(df, ["AMZN", "GOOGL"], 'plots/SP500')
     
-    # Dataset Shape - (Batches, Sequence Length, Features) - (B, Amount of Days, 4)
-    # Features: Open, High, Low, Close
-    # Targets: Open, High, Low, Close
-    
-    # print(df[df.isna().any(axis=1)])
     dataset = preprocess_data(df)
-    # if args.auto_regressor:
-    #     dataset, dataset_y = create_autoregressive_data(dataset)
-    
-    # # 1 1 1 1 1 1 0 0 1 0 1 0 1 1 0 0 1 0 1
-    # # 1 1 1 1 1 0 0 1 0 1 0 1 1 0 0 1 0 1
+
     N_samples, N_days, N_features = dataset.shape
     print(f"{N_samples=}, {N_days=}, {N_features=}")
     args = get_train_args()
@@ -188,18 +201,16 @@ def main():
     criterion = nn.MSELoss()
     
     optimizer_type = torch.optim.Adam if args.optimizer == "adam" else torch.optim.SGD # should expand to support more optimizers
-    
-    #grid search
-    # Implement Optuna
-    # Optuna (train_data, val_data, criterion, optimizer_type, device)
+    model_type = args.model_type
+    best_params = None
+
     batch_size = args.batch_size
     hidden_size = N_features // 2 if args.hidden_size == 'half' else int(args.hidden_size)
     lr = args.lr
     gradient_clip = args.grad_clip
     epochs = args.epochs if not args.hyper_search else args.trial_epochs
-    session_type = 'ae' if not args.auto_regressor else 'ar'
 
-    if args.auto_regressor:
+    if model_type == "ar":
         X_train, y_train = create_autoregressive_data(train_data)
         train_data = TensorDataset(X_train, y_train)
         
@@ -221,7 +232,7 @@ def main():
                                    criterion,
                                    optimizer_type,
                                    args.trial_epochs,
-                                   session_type,
+                                   model_type,
                                    args.n_trials,
                                    hidden_size,
                                    device
@@ -233,7 +244,7 @@ def main():
 
         
     #create model
-    if args.auto_regressor:
+    if model_type == 'ar':
         model = LSTM_AR(N_features, hidden_size, bidirectional=args.bidirectional)
     else:
         model = LSTM_AE(N_features, hidden_size, bidirectional=args.bidirectional)
@@ -253,12 +264,12 @@ def main():
                       lr,
                       optimizer_type,
                       plot_folder,
-                      session_type,
+                      model_type,
                       device,
                       )
     
     #evaluate
-    test_loss, _ = evaluate(test_loader, model, criterion, session_type, device)
+    test_loss, _ = evaluate(test_loader, model, criterion, model_type, device)
     print(f"Test loss: {test_loss}")
     #save model
     models_folder = "./models"
@@ -267,7 +278,7 @@ def main():
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
     
     number_of_plots = 3
-    if not args.auto_regressor:
+    if model_type == "ae":
         plot_ae(test_loader1, model, number_of_plots)
     else:
         plot_ar(test_loader1, model, number_of_plots)

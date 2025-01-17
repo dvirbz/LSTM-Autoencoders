@@ -9,7 +9,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split, Dataset
 
 from argparser import get_train_args
-from lstm_AE import LSTM_AE_Classifier
+from lstm_AE import LSTM_AE, LSTM_AE_Classifier
 from train_utils import optuna_train, evaluate, plot_train_losses
 
 def main():
@@ -19,8 +19,7 @@ def main():
 
     mnist_train = datasets.MNIST(root="./data", train=True, download=True)
     mnist_test = datasets.MNIST(root="./data", train=False, download=True)
-    train_mean = torch.mean(mnist_train.data.float())
-    train_std = torch.std(mnist_train.data.float())
+    model_type = args.model_type
 
     transformations = transforms.Compose([
         transforms.ToTensor(),
@@ -62,7 +61,7 @@ def main():
                                    criterion,
                                    optimizer_type,
                                    trial_epochs,
-                                   'cls',
+                                   model_type,
                                    args.n_trials,
                                    hidden_size_limit,
                                    device,
@@ -80,7 +79,10 @@ def main():
     test_loader = DataLoader(mnist_test, batch_size=batch_size)
     
     #create model
-    model = LSTM_AE_Classifier(n_features, hidden_size, len(np.unique(mnist_train.targets)) ,bidirectional=args.bidirectional)
+    if model_type == 'ae':
+        model = LSTM_AE(n_features, hidden_size)
+    else:
+        model = LSTM_AE_Classifier(n_features, hidden_size, len(np.unique(mnist_train.targets)) ,bidirectional=args.bidirectional)
     print(model)
 
     # Make sure correct plot folder exits
@@ -95,21 +97,17 @@ def main():
                       lr,
                       optimizer_type,
                       f'{plot_folder}/'+ pixel_wise,
-                      'cls',
+                      model_type,
                       device,
-                      True,
+                    #   True,
                       )
 
 
     
     #evaluate
-    test_loss, accuracy = evaluate(test_loader, model, criterion, 'cls', device)
-<<<<<<< HEAD
-    print(f"Test loss: {test_loss}, Test accuracy: {accuracy}")
-=======
-    print(f"Test Loss: {test_loss}, Test Accuracy: {accuracy}")
->>>>>>> f12afa05270b9e36448caea1de49431552ffd7f8
-    test_loss = np.round(test_loss, 4)
+    test_loss, accuracy = evaluate(test_loader, model, criterion, model_type, device)
+    print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {accuracy:.4f}")
+
 
     #save model
     models_folder = "./models"
@@ -124,15 +122,22 @@ def main():
         if target in plotted_digits:
             continue
         plotted_digits.add(target)
-        output, probs = model(data.to(device))
+        if model_type == 'cls':
+            output, probs = model(data.to(device))
+        else:
+            output = model(data.to(device))
         input_img = data.squeeze().detach().cpu().numpy().reshape(n_rows_og, n_features_og)
         output = output.squeeze().detach().cpu().numpy().reshape(n_rows_og, n_features_og)
-        predicted_digit = torch.argmax(probs)
+        if model_type == 'cls':
+            predicted_digit = torch.argmax(probs)
         _, ax = plt.subplots(1, 2)
         ax[0].imshow(input_img, cmap="gray")
         ax[0].set_title("True digit")
         ax[1].imshow(output, cmap="gray")
-        ax[1].set_title(f"Predicted digit {predicted_digit}")
+        if model_type == 'cls':
+            ax[1].set_title(f"Predicted digit {predicted_digit}")
+        else:
+            ax[1].set_title("Reconstructed digit")
         ax[0].set_axis_off()
         ax[1].set_axis_off()
         plt.savefig(f"./plots/MNIST/{model_name}_digit_{int(target)}.png")

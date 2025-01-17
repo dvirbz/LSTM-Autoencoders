@@ -22,6 +22,8 @@ class SqrtSched(_LRScheduler):
 def train_epoch_AE(train_loader, model, optimizer, criterion, grad_clip, device):
     running_loss = 0.0
     for data in train_loader:
+        if isinstance(data, list):
+            data, _ = data
         optimizer.zero_grad()
         data = data.float().to(device)
         output = model(data).to(device)
@@ -88,6 +90,8 @@ def evaluate_AE(val_loader, model, criterion, device):
     model.eval()
     with torch.no_grad():
         for data in val_loader:
+            if isinstance(data, list):
+                data, _ = data
             data = data.float().to(device)
             output = model(data).to(device)
             all_outputs.append((data, output))
@@ -153,10 +157,9 @@ def evaluate_regressor(val_loader, model, criterion, device):
             ar_accumulative_loss += ar_loss.item()
             ae_accumulative_loss += ae_loss.item()
 
-    total_loss = accumulative_loss / len(val_loader)
     ar_total_loss = ar_accumulative_loss / len(val_loader)
     ae_total_loss = ae_accumulative_loss / len(val_loader)
-    return total_loss, ar_total_loss, ae_total_loss
+    return ar_total_loss, ae_total_loss
 
 MODELS = {
     'ae' : {
@@ -213,7 +216,6 @@ def plot_train_losses(train_loader,
                       save_path,
                       model_type,
                       device,
-                      with_accuracy=False,
                       ):
     """
     Train a neural network model and display an interactive graph of training
@@ -232,9 +234,9 @@ def plot_train_losses(train_loader,
     """
     # Initialize variables to store losses
     train_losses = []
-    train_accs = []
+    train_metric2s = []
     # Prepare the interactive plot
-    if with_accuracy:
+    if model_type != 'ae':
         _, ax = plt.subplots(2, figsize=(9, 9))
         axis = ax
     else:
@@ -247,9 +249,10 @@ def plot_train_losses(train_loader,
             a.set_title('Training Loss')
             train_line, = a.plot([], [], label='Train Loss', color='blue')
         else:
-            a.set_ylabel('Accuracy')
-            a.set_title('Training Accuracy')
-            acc_line, = a.plot([], [], label='Train Accuracy', color='blue')
+            label = 'Accuracy' if model_type == 'cls' else 'Regression Loss'
+            a.set_ylabel(label)
+            a.set_title(f'Training {label}')
+            metric2_line, = a.plot([], [], label='Train Accuracy', color='blue')
 
     # Add a text box for learning rate
     for a in axis:
@@ -257,29 +260,33 @@ def plot_train_losses(train_loader,
             lr_text = a.text(0.1, 0.95, '', transform=a.transAxes)
             loss_text = a.text(0.1, 0.85, '', transform=a.transAxes)
         else:
-            acc_text = a.text(0.1, 0.95, '', transform=a.transAxes)
+            metric2_text = a.text(0.1, 0.95, '', transform=a.transAxes)
 
     # Helper function to update the graph
-    def update_graph(train_loss, train_acc, learning_rate):
+    def update_graph(*train_metrics, learning_rate):
+        train_loss = train_metrics[0]
         train_losses.append(train_loss)
-        if with_accuracy:
-            train_accs.append(train_acc)
+        if model_type != 'ae':
+            train_metric2 = train_metrics[1]
+            train_metric2s.append(train_metric2)
         train_line.set_data(range(1, len(train_losses) + 1), train_losses)
-        if with_accuracy:
-            acc_line.set_data(range(1, len(train_accs) + 1), train_accs)
+        if model_type != 'ae':
+            metric2_line.set_data(range(1, len(train_metric2s) + 1), train_metric2s)
         for a in axis:
             a.relim()
             a.autoscale_view()
         loss_text.set_text(f'Train Loss: {train_loss:.4f}')
-        if with_accuracy:
-            acc_text.set_text(f'Train Accuracy: {train_acc:.4f}')
+        if model_type == 'cls':
+            metric2_text.set_text(f'Train Accuracy: {train_metric2:.4f}')
+        if model_type == 'ar':
+            metric2_text.set_text(f'Train Regression Loss: {train_metric2:.4f}')
         lr_text.set_text(f'Learning Rate: {learning_rate:.5e}')
         plt.draw()
         plt.pause(0.01)
 
     model.to(device)
     model.train()
-    train_acc = None
+    train_metric2 = None
 
     optimizer = optimizer_type(model.parameters(), lr=learning_rate)
     print(f"Optimizer: {optimizer}")
@@ -289,15 +296,10 @@ def plot_train_losses(train_loader,
         trainer = MODELS[model_type]['TRAINER']
         train_loss = trainer(train_loader, model, optimizer, criterion, grad_clip, device)
         losses.append(train_loss)
-        if with_accuracy:
-            # data = train_loader.dataset.data.to(device).to(torch.float32)
-            # pred = torch.argmax(model(data)[1], dim=1)
-            # targets = train_loader.dataset.targets.to(device)
-            # tqdm.write(f"{pred=}, {targets=}")
-            # train_acc = (pred == targets).to(torch.float32).mean().item()
-            train_acc = evaluate(train_loader, model, criterion, model_type, device)[1]
+        if model_type != 'ae':
+            train_loss, train_metric2 = evaluate(train_loader, model, criterion, model_type, device)
             model.train()
-        update_graph(train_loss, train_acc, optimizer.param_groups[0]["lr"])
+        update_graph(train_loss, train_metric2, learning_rate=optimizer.param_groups[0]["lr"])
         scheduler.step()
 
     plt.savefig(f'{save_path}_loss_plots.png')
@@ -323,9 +325,9 @@ def optuna_train(
         hyperparams["grad_clip"] = trial.suggest_categorical("grad_clip", np.arange(0.1, 2.1, 0.4))
         hyperparams["hidden_size"] = trial.suggest_int("hidden_size", 1, hidden_size_limit)
         if model_type == 'cls':
-            input_shape = train_loader.dataset.data.shape[1]
+            input_shape = train_loader.dataset.data.shape[2]
         elif model_type == 'ae':
-            input_shape = train_loader.dataset.shape[1]
+            input_shape = train_loader.dataset.shape[2]
         elif model_type == 'ar':
             input_shape = train_loader.dataset[0][0].shape[1]
 
@@ -346,10 +348,12 @@ def optuna_train(
               device
               )
 
-        val_loss, accuracy = evaluate(val_loader, model, criterion, model_type, device)
+        val_loss, metric2 = evaluate(val_loader, model, criterion, model_type, device)
         del model
         if model_type == 'cls':
-            return 1 - accuracy
+            return 1 - metric2
+        if model_type == 'ar':
+            return val_loss + metric2
         return val_loss
 
     study = optuna.create_study(direction="minimize")

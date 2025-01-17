@@ -57,14 +57,16 @@ def train_epoch_CLS(train_loader, model, optimizer, criterion, grad_clip, device
     total_loss = running_loss / len(train_loader)
     return total_loss
 
-def train_epoch_regressor(train_loader, model, optimizer, criterion, grad_clip, device, lambda_ar=10):
+def train_epoch_regressor(train_loader, model, optimizer, criterion, grad_clip, device, lambda_ar=1):
     running_loss = 0.0
+    ar_running_loss = 0.0
+    ae_running_loss = 0.0
     for data, targets in train_loader:
         optimizer.zero_grad()
         targets = targets.to(device)
         data = data.float().to(device)
         x_hat, y_hat = model(data)
-        ar_loss = criterion(y_hat, targets)
+        ar_loss = lambda_ar * criterion(y_hat, targets)
         ae_loss = criterion(x_hat, data)
         loss = ar_loss + ae_loss
         loss.backward()
@@ -72,9 +74,13 @@ def train_epoch_regressor(train_loader, model, optimizer, criterion, grad_clip, 
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
         running_loss += loss.item()
+        ar_running_loss += ar_loss.item()
+        ae_running_loss += ae_loss.item()
 
     total_loss = running_loss / len(train_loader)
-    return total_loss
+    ar_total_loss = ar_running_loss / len(train_loader)
+    ae_total_loss = ae_running_loss / len(train_loader)
+    return total_loss, ar_running_loss, ae_running_loss
 
 def evaluate_AE(val_loader, model, criterion, device):
     accumulative_loss = 0.0
@@ -121,6 +127,8 @@ def evaluate_CLS(val_loader, model, criterion, device):
 
 def evaluate_regressor(val_loader, model, criterion, device):
     accumulative_loss = 0.0
+    ar_accumulative_loss = 0.0
+    ae_accumulative_loss = 0.0
     model.eval()
     with torch.no_grad():
         for data, targets in val_loader:
@@ -142,9 +150,13 @@ def evaluate_regressor(val_loader, model, criterion, device):
             ae_loss = criterion(data, model(data)[0])
             loss = ar_loss + ae_loss
             accumulative_loss += loss.item()
+            ar_accumulative_loss += ar_loss.item()
+            ae_accumulative_loss += ae_loss.item()
 
     total_loss = accumulative_loss / len(val_loader)
-    return total_loss, None
+    ar_total_loss = ar_accumulative_loss / len(val_loader)
+    ae_total_loss = ae_accumulative_loss / len(val_loader)
+    return total_loss, ar_total_loss, ae_total_loss
 
 MODELS = {
     'ae' : {
@@ -310,19 +322,12 @@ def optuna_train(
         hyperparams["lr"] = trial.suggest_categorical("lr", np.logspace(-3.5, -1.5, num=5))
         hyperparams["grad_clip"] = trial.suggest_categorical("grad_clip", np.arange(0.1, 2.1, 0.4))
         hyperparams["hidden_size"] = trial.suggest_int("hidden_size", 1, hidden_size_limit)
-<<<<<<< HEAD
         if model_type == 'cls':
             input_shape = train_loader.dataset.data.shape[1]
         elif model_type == 'ae':
             input_shape = train_loader.dataset.shape[1]
         elif model_type == 'ar':
             input_shape = train_loader.dataset[0][0].shape[1]
-=======
-        if model_type == 'cls' or model_type == 'ar':
-            input_shape = [input.shape[2] for input, _ in train_loader][0]
-        else:
-            input_shape = train_loader.dataset.shape[2]
->>>>>>> f12afa05270b9e36448caea1de49431552ffd7f8
 
         model = MODELS[model_type]['MODEL']
         if model_type == 'cls':

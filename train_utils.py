@@ -241,11 +241,11 @@ def plot_train_losses(train_loader,
 
     # Add a text box for learning rate
     for a in axis:
-        lr_text = a.text(0.1, 0.95, '', transform=a.transAxes)
         if a == axis[0]:
+            lr_text = a.text(0.1, 0.95, '', transform=a.transAxes)
             loss_text = a.text(0.1, 0.85, '', transform=a.transAxes)
         else:
-            acc_text = a.text(0.1, 0.75, '', transform=a.transAxes)
+            acc_text = a.text(0.1, 0.95, '', transform=a.transAxes)
 
     # Helper function to update the graph
     def update_graph(train_loss, train_acc, learning_rate):
@@ -310,12 +310,19 @@ def optuna_train(
         hyperparams["lr"] = trial.suggest_categorical("lr", np.logspace(-3.5, -1.5, num=5))
         hyperparams["grad_clip"] = trial.suggest_categorical("grad_clip", np.arange(0.1, 2.1, 0.4))
         hyperparams["hidden_size"] = trial.suggest_int("hidden_size", 1, hidden_size_limit)
+<<<<<<< HEAD
         if model_type == 'cls':
             input_shape = train_loader.dataset.data.shape[1]
         elif model_type == 'ae':
             input_shape = train_loader.dataset.shape[1]
         elif model_type == 'ar':
             input_shape = train_loader.dataset[0][0].shape[1]
+=======
+        if model_type == 'cls' or model_type == 'ar':
+            input_shape = [input.shape[2] for input, _ in train_loader][0]
+        else:
+            input_shape = train_loader.dataset.shape[2]
+>>>>>>> f12afa05270b9e36448caea1de49431552ffd7f8
 
         model = MODELS[model_type]['MODEL']
         if model_type == 'cls':

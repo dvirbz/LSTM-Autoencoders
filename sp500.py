@@ -9,9 +9,10 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from torch.utils.data import TensorDataset, DataLoader
 
+
 from argparser import get_train_args
 from lstm_AE import LSTM_AE, LSTM_AR
-from train_utils import evaluate, plot_train_losses
+from train_utils import evaluate, plot_train_losses, optuna_train
 
 def plot_daily_max(df, stocks):
     plt.figure(figsize=(12, 8))
@@ -54,15 +55,17 @@ def split_data(dataset):
     train_data, val_data = train_test_split(train_data, test_size=0.25, shuffle=True)
 
     train_min, train_max = train_data.min(), train_data.max()
-
+    train_mean, train_std = train_data.mean(), train_data.std()
     first_transform = transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32))
 
     transform = transforms.Compose([
         first_transform,
-        transforms.Normalize((train_min,), (train_max - train_min,)),
+        # transforms.Lambda(lambda x: (x - train_min) / (train_max - train_min))
+        transforms.Normalize(mean=train_mean, std=train_std)
         ])
 
     train_data = transform(train_data)
+    print(f"{train_data[:, 0, :]=}")
     val_data = transform(val_data)
     test_data = transform(test_data)
 
@@ -101,7 +104,7 @@ def plot_ae(test_loader, model, number_of_plots=3):
         plt.show()
         i += 1
 
-def plot_ar(test_loader, model, number_of_plots=3, device="cuda"):
+def plot_ar(test_loader, model, number_of_plots=3, device="cuda", save_path= "./plots/SP500"):
     i = 0
     for data, targets in test_loader:
         if i == number_of_plots:
@@ -109,13 +112,20 @@ def plot_ar(test_loader, model, number_of_plots=3, device="cuda"):
         data = data.permute(1, 0, 2).to(device)
         first_data, second_data = train_test_split(data, test_size=0.5, shuffle=False)
         first_data = first_data.permute(1, 0, 2).to(device)
-        second_data = second_data.permute(1, 0, 2).to(device)
-        second_data_hat = model.generate(first_data, second_data.shape[1]).to(device)
-        # second_data = second_data.detach().cpu().numpy()
-        # second_data_hat = second_data_hat.detach().cpu().numpy()
-        true_data = torch.cat((first_data, second_data), dim=1)
+        first_data, second_data = train_test_split(data, test_size=0.5, shuffle=False)
+        data = data.permute(1, 0, 2)
+        first_data = first_data.to(device).permute(1, 0, 2)
+        second_data = second_data.to(device).permute(1, 0, 2)
+        N = second_data.shape[1]
+        input_seq = data[:, : N, :].to(device)
+        second_data_hat = torch.zeros(second_data.shape[0], N, second_data.shape[2]).to(device)
+        for j in range(N):
+            y_hat = model.generate(input_seq).to(device)
+            second_data_hat[:, j, :] = y_hat
+            input_seq = data[:, j : j + N, :]
+        # true_data = torch.cat((first_data, second_data), dim=1)
         pred_data = torch.cat((first_data, second_data_hat), dim=1)
-        open, high, low, close = true_data.squeeze().permute(1, 0).detach().cpu().numpy()
+        open, high, low, close = data.squeeze().permute(1, 0).detach().cpu().numpy()
         pred_open, pred_high, pred_low, pred_close = pred_data.squeeze().permute(1, 0).detach().cpu().numpy()
         
         plt.subplot(2, 2, 1)
@@ -138,6 +148,7 @@ def plot_ar(test_loader, model, number_of_plots=3, device="cuda"):
         plt.plot(pred_close, label="Pred Close")
         plt.legend()
         
+        plt.savefig(f"{save_path}/AR_plot_{i}.png")
         plt.show()
         i += 1
 
@@ -185,8 +196,9 @@ def main():
     hidden_size = N_features // 2 if args.hidden_size == 'half' else int(args.hidden_size)
     lr = args.lr
     gradient_clip = args.grad_clip
-    epochs = args.epochs
-    
+    epochs = args.epochs if not args.hyper_search else args.trial_epochs
+    session_type = 'ae' if not args.auto_regressor else 'ar'
+
     if args.auto_regressor:
         X_train, y_train = create_autoregressive_data(train_data)
         train_data = TensorDataset(X_train, y_train)
@@ -203,6 +215,23 @@ def main():
     test_loader = DataLoader(test_data, batch_size=batch_size)
     test_loader1 = DataLoader(test_data, batch_size=1)
 
+    if args.hyper_search:
+        best_params = optuna_train(train_loader,
+                                   val_loader,
+                                   criterion,
+                                   optimizer_type,
+                                   args.trial_epochs,
+                                   session_type,
+                                   args.n_trials,
+                                   hidden_size,
+                                   device
+                                   )
+        print(f"Best params: {best_params}")
+        hidden_size = best_params["hidden_size"]
+        lr = best_params["lr"]
+        gradient_clip = best_params["grad_clip"]
+
+        
     #create model
     if args.auto_regressor:
         model = LSTM_AR(N_features, hidden_size, bidirectional=args.bidirectional)
@@ -215,7 +244,6 @@ def main():
     plot_folder = "./plots/SP500"
     os.makedirs(plot_folder, exist_ok=True)
 
-    session_type = 'ae' if not args.auto_regressor else 'ar'
     #train
     plot_train_losses(train_loader,
                       model,

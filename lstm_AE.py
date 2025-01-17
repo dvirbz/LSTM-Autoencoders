@@ -98,7 +98,7 @@ class LSTM_AE_Classifier(nn.Module):
         return x_hat, cls
 
 class LSTM_AR(nn.Module):
-    def __init__(self, input_size, hidden_size, bidirectional=True):
+    def __init__(self, input_size, hidden_size, bidirectional=True, num_layers=1):
         """
         Initializes the LSTM Autoencoder model.
         Args:
@@ -107,7 +107,7 @@ class LSTM_AR(nn.Module):
             bidirectional (bool, optional): If True, the encoder LSTM will be bidirectional. Defaults to True.
         """
         super().__init__()
-        self.encoder = nn.LSTM(input_size, hidden_size, batch_first=True, bidirectional=bidirectional)
+        self.encoder = nn.LSTM(input_size, hidden_size, batch_first=True, bidirectional=bidirectional, num_layers=num_layers)
         self.decoder = nn.LSTM(hidden_size * 2 if bidirectional else hidden_size, input_size, batch_first=True)
         self.regressor = nn.LSTM(hidden_size * 2 if bidirectional else hidden_size, input_size, batch_first=True)
 
@@ -126,15 +126,20 @@ class LSTM_AR(nn.Module):
         y_hat, _ = self.regressor(z)
         return x_hat, y_hat
     
-    def generate(self, x, N):
-        input_x = x
-        preds = torch.zeros(x.shape[0], N, x.shape[2])
-        for i in range(N):
-            z, _ = self.encoder(input_x)
-            y_hat, _ = self.regressor(z)
-            preds[:, i, :] = y_hat[:, -1, :]
-            # print(f"{input_x.shape=}, {y_hat[:, -1, :].unsqueeze(1).shape=}, {preds[:, i, :].shape=}, {preds.shape=}, {y_hat.shape=}")
-            input_x = torch.cat((input_x, y_hat[:, -1, :].unsqueeze(1)), dim=1)
-
-        return preds
+    # def generate(self, x, N):
+    #     input_x = x[i : i + N]
+    #     preds = torch.zeros(x.shape[0], N, x.shape[2])
+    #     for i in range(N):
+    #         z, _ = self.encoder(input_x)
+    #         y_hat, _ = self.regressor(z)
+    #         preds[:, i, :] = y_hat[:, -1, :]
+    #         # print(f"{input_x.shape=}, {y_hat[:, -1, :].unsqueeze(1).shape=}, {preds[:, i, :].shape=}, {preds.shape=}, {y_hat.shape=}")
+    #         # input_x = torch.cat((input_x, y_hat[:, -1, :].unsqueeze(1)), dim=1)
+    #         input_x = x[i : i + N]
+    #     return preds
+    
+    def generate(self, x):
+        z, _ = self.encoder(x)
+        y_hat, _ = self.regressor(z)
+        return y_hat[:, -1, :]
                     

@@ -57,14 +57,16 @@ def train_epoch_CLS(train_loader, model, optimizer, criterion, grad_clip, device
     total_loss = running_loss / len(train_loader)
     return total_loss
 
-def train_epoch_regressor(train_loader, model, optimizer, criterion, grad_clip, device):
+def train_epoch_regressor(train_loader, model, optimizer, criterion, grad_clip, device, lambda_ar=10):
     running_loss = 0.0
     for data, targets in train_loader:
         optimizer.zero_grad()
         targets = targets.to(device)
         data = data.float().to(device)
         x_hat, y_hat = model(data)
-        loss = criterion(data, x_hat) + criterion(targets, y_hat)
+        ar_loss = criterion(y_hat, targets)
+        ae_loss = criterion(x_hat, data)
+        loss = ar_loss + ae_loss
         loss.backward()
         
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -124,10 +126,18 @@ def evaluate_regressor(val_loader, model, criterion, device):
         for data, targets in val_loader:
             targets = targets.to(device)
             data = data.float().to(device).permute(1, 0, 2)
-            first_data, second_data = train_test_split(data, test_size=0.5, shuffle=False)
-            first_data = first_data.to(device).permute(1, 0, 2)
+            _, second_data = train_test_split(data, test_size=0.5, shuffle=False)
+            data = data.permute(1, 0, 2)
             second_data = second_data.to(device).permute(1, 0, 2)
-            second_data_hat = model.generate(first_data, second_data.shape[1]).to(device)
+            N = second_data.shape[1]
+            input_seq = data[:, : N, :].to(device)
+            second_data_hat = torch.zeros(second_data.shape[0], N, second_data.shape[2]).to(device)
+            for i in range(N):
+                y_hat = model.generate(input_seq).to(device)
+                second_data_hat[:, i, :] = y_hat
+                input_seq = data[:, i : i + N, :]
+
+            # second_data_hat = model.generate(first_data, second_data.shape[1]).to(device)
             ar_loss = criterion(second_data, second_data_hat)
             ae_loss = criterion(data, model(data)[0])
             loss = ar_loss + ae_loss
@@ -297,13 +307,15 @@ def optuna_train(
 ):
     def objective(trial):
         hyperparams = {}
-        hyperparams["lr"] = trial.suggest_categorical("lr", np.logspace(-4, -2, num=10))
-        hyperparams["grad_clip"] = trial.suggest_categorical("grad_clip", np.arange(0.1, 2.1, 0.1))
+        hyperparams["lr"] = trial.suggest_categorical("lr", np.logspace(-3.5, -1.5, num=5))
+        hyperparams["grad_clip"] = trial.suggest_categorical("grad_clip", np.arange(0.1, 2.1, 0.4))
         hyperparams["hidden_size"] = trial.suggest_int("hidden_size", 1, hidden_size_limit)
-        if model_type == 'cls' or model_type == 'ar':
+        if model_type == 'cls':
             input_shape = train_loader.dataset.data.shape[1]
-        else:
+        elif model_type == 'ae':
             input_shape = train_loader.dataset.shape[1]
+        elif model_type == 'ar':
+            input_shape = train_loader.dataset[0][0].shape[1]
 
         model = MODELS[model_type]['MODEL']
         if model_type == 'cls':

@@ -80,7 +80,7 @@ def main():
     print(model)
 
     # Make sure correct plot folder exits
-    pixel_wise = "_Pixel_wise" if args.pixel_wise else ""
+    pixel_wise = "_pixel_wise" if args.pixel_wise else ""
     plot_folder = "./plots/MNIST"
     os.makedirs(plot_folder, exist_ok=True)
     plot_train_losses(train_loader,
@@ -100,13 +100,13 @@ def main():
     
     #evaluate
     test_loss, accuracy = evaluate(test_loader, model, criterion, 'cls', device)
-    print(f"Test loss: {test_loss}")
+    print(f"Test loss: {test_loss}, Test accuracy: {accuracy}")
     test_loss = np.round(test_loss, 4)
 
     #save model
     models_folder = "./models"
     os.makedirs(models_folder, exist_ok=True)
-    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{pixel_wise=}"
+    model_name = f"model_{hidden_size=}_{lr=}_{gradient_clip=}_{epochs=}_{batch_size=}_{test_loss=}{pixel_wise}"
     torch.save(model.state_dict(), f"./models/{model_name}.pt")
     n_digits_to_plot = 3
     #plot some outputs pairs

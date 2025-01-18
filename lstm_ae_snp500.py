@@ -107,9 +107,9 @@ def plot_ae(test_loader, model, number_of_plots=3):
         plt.show()
         i += 1
 
-def plot_ar(test_loader, model, number_of_plots=3, device="cuda", save_path= "./plots/SP500"):
+def plot_ar(test_loader, model, number_of_plots=3, device="cuda", save_path="./plots/SP500"):
     i = 0
-    for data, targets in test_loader:
+    for data, _ in test_loader:
         if i == number_of_plots:
             break
         data = data.permute(1, 0, 2).to(device)
@@ -120,21 +120,27 @@ def plot_ar(test_loader, model, number_of_plots=3, device="cuda", save_path= "./
         first_data = first_data.to(device).permute(1, 0, 2)
         second_data = second_data.to(device).permute(1, 0, 2)
         N = second_data.shape[1]
-        input_seq = data[:, : N, :].to(device)
+        input_seq = data[:, :N, :].to(device)
         second_data_hat = torch.zeros(second_data.shape[0], N, second_data.shape[2]).to(device)
         for j in range(N):
             y_hat = model.generate(input_seq).to(device)
             second_data_hat[:, j, :] = y_hat
-            input_seq = data[:, j : j + N, :]
-        # true_data = torch.cat((first_data, second_data), dim=1)
+            input_seq = data[:, j:j+N, :]
+
+        one_step_preds = model(data)[1].to(device)
+        shift = 1
+        one_step_preds = torch.cat((data[:, 0:shift, :], one_step_preds[:, :-shift, :]), dim=1)
+        
         pred_data = torch.cat((first_data, second_data_hat), dim=1)
         open, high, low, close = data.squeeze().permute(1, 0).detach().cpu().numpy()
         pred_open, pred_high, pred_low, pred_close = pred_data.squeeze().permute(1, 0).detach().cpu().numpy()
+        one_step_open, one_step_high, one_step_low, one_step_close = one_step_preds.squeeze().permute(1, 0).detach().cpu().numpy()
         
         plt.figure(figsize=(16, 16))
         plt.subplot(2, 2, 1)
         plt.plot(open, label="Open")
         plt.plot(pred_open, label="Pred Open")
+        plt.plot(one_step_open, label="One Step Pred Open")
         plt.axvline(first_data.shape[1], color='r', linestyle='--')
         plt.title("Open")
         plt.xlabel("Days")
@@ -144,6 +150,7 @@ def plot_ar(test_loader, model, number_of_plots=3, device="cuda", save_path= "./
         plt.subplot(2, 2, 2)
         plt.plot(high, label="High")
         plt.plot(pred_high, label="Pred High")
+        plt.plot(one_step_high, label="One Step Pred High")
         plt.axvline(first_data.shape[1], color='r', linestyle='--')
         plt.title("High")
         plt.xlabel("Days")
@@ -153,6 +160,7 @@ def plot_ar(test_loader, model, number_of_plots=3, device="cuda", save_path= "./
         plt.subplot(2, 2, 3)
         plt.plot(low, label="Low")
         plt.plot(pred_low, label="Pred Low")
+        plt.plot(one_step_low, label="One Step Pred Low")
         plt.axvline(first_data.shape[1], color='r', linestyle='--')
         plt.title("Low")
         plt.xlabel("Days")
@@ -162,6 +170,7 @@ def plot_ar(test_loader, model, number_of_plots=3, device="cuda", save_path= "./
         plt.subplot(2, 2, 4)
         plt.plot(close, label="Close")
         plt.plot(pred_close, label="Pred Close")
+        plt.plot(one_step_close, label="One Step Pred Close")
         plt.axvline(first_data.shape[1], color='r', linestyle='--')
         plt.title("Close")
         plt.xlabel("Days")

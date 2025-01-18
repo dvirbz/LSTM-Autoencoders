@@ -161,6 +161,20 @@ def evaluate_regressor(val_loader, model, criterion, device):
     ae_total_loss = ae_accumulative_loss / len(val_loader)
     return ar_total_loss, ae_total_loss
 
+def evaluate_regressor_one_step(val_loader, model, criterion, device):
+    accumulative_loss = 0.0
+    model.eval()
+    with torch.no_grad():
+        for data, targets in val_loader:
+            targets = targets.to(device)
+            data = data.float().to(device)
+            x_hat, y_hat = model(data)
+            loss = criterion(y_hat, targets)
+            accumulative_loss += loss.item()
+
+    total_loss = accumulative_loss / len(val_loader)
+    return total_loss
+
 MODELS = {
     'ae' : {
             'MODEL' : LSTM_AE,

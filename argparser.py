@@ -15,6 +15,6 @@ def get_train_args():
     parser.add_argument('--hyper_search', action='store_true', help='Whether to perform hyperparameter search')
     parser.add_argument('--n_trials', type=int, default=20, help='number of trials for hyperparameter search')
     parser.add_argument('--trial_epochs', type=int, default=100, help='Number of epochs per trial for hyperparameter search')
-    parser.add_argument('--model_type', type=str, default='ae', help='Type of model to train')
+    parser.add_argument('--model_type', type=str, default='ae', help='Type of model to train - ar - autoregressive\n ae - autoencoder\ncls - mnist classifier')
 
     return parser.parse_args()

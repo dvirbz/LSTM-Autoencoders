@@ -82,7 +82,7 @@ def train_epoch_regressor(train_loader, model, optimizer, criterion, grad_clip, 
     total_loss = running_loss / len(train_loader)
     ar_total_loss = ar_running_loss / len(train_loader)
     ae_total_loss = ae_running_loss / len(train_loader)
-    return total_loss, ar_running_loss, ae_running_loss
+    return ae_running_loss, ar_running_loss
 
 def evaluate_AE(val_loader, model, criterion, device):
     accumulative_loss = 0.0
@@ -297,8 +297,9 @@ def plot_train_losses(train_loader,
         train_loss = trainer(train_loader, model, optimizer, criterion, grad_clip, device)
         losses.append(train_loss)
         if model_type != 'ae':
-            train_loss, train_metric2 = evaluate(train_loader, model, criterion, model_type, device)
-            model.train()
+            # train_loss, train_metric2 = evaluate(train_loader, model, criterion, model_type, device)
+            # model.train()
+            train_loss, train_metric2 = train_loss
         update_graph(train_loss, train_metric2, learning_rate=optimizer.param_groups[0]["lr"])
         scheduler.step()
 

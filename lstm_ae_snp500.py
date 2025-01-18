@@ -59,7 +59,7 @@ def split_data(dataset):
     train_data, test_data = train_test_split(dataset.detach().cpu(), test_size=0.2, shuffle=True)
     train_data, val_data = train_test_split(train_data, test_size=0.25, shuffle=True)
 
-    train_mean, train_std = train_data.mean(), train_data.std()
+    train_mean, train_std = train_data.mean(dim=0, keepdims=True), train_data.std(dim=0, keepdims=True)
     first_transform = transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32))
 
     transform = transforms.Compose([
@@ -267,7 +267,11 @@ def main():
                       )
     
     #evaluate
-    test_loss, _ = evaluate(test_loader, model, criterion, model_type, device)
+    if model_type == "ar":
+        encoder_loss, regressor_loss = evaluate(test_loader, model, criterion, model_type, device)
+        test_loss = encoder_loss + regressor_loss
+    else:
+        test_loss, _ = evaluate(test_loader, model, criterion, model_type, device)
     print(f"Test loss: {test_loss}")
     #save model
     models_folder = "./models"

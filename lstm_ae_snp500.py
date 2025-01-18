@@ -59,13 +59,11 @@ def split_data(dataset):
     train_data, test_data = train_test_split(dataset.detach().cpu(), test_size=0.2, shuffle=True)
     train_data, val_data = train_test_split(train_data, test_size=0.25, shuffle=True)
 
-    train_min, train_max = train_data.min(), train_data.max()
     train_mean, train_std = train_data.mean(), train_data.std()
     first_transform = transforms.Lambda(lambda x: torch.tensor(x,dtype=torch.float32))
 
     transform = transforms.Compose([
         first_transform,
-        # transforms.Lambda(lambda x: (x - train_min) / (train_max - train_min))
         transforms.Normalize(mean=train_mean, std=train_std)
         ])
 

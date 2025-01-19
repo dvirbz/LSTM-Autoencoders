@@ -20,13 +20,13 @@ class LSTM_AE(nn.Module):
                 torch.Tensor: Reconstructed sequence of shape (batch, seq_len, input_size).
     """
     
-    def __init__(self, input_size, hidden_size, bidirectional=True):
+    def __init__(self, input_size, hidden_size, bidirectional=False):
         """
         Initializes the LSTM Autoencoder model.
         Args:
             input_size (int): The number of input features.
             hidden_size (int): The number of features in the hidden state.
-            bidirectional (bool, optional): If True, the encoder LSTM will be bidirectional. Defaults to True.
+            bidirectional (bool, optional): If True, the encoder LSTM will be bidirectional. Defaults to False.
         """
         super().__init__()
         self.encoder = nn.LSTM(input_size, hidden_size, batch_first=True, bidirectional=bidirectional)
@@ -68,14 +68,14 @@ class LSTM_AE_Classifier(nn.Module):
                 cls (torch.Tensor): Classification output tensor of shape (batch_size, number_classes).
     """
 
-    def __init__(self, input_size, hidden_size, number_classes, bidirectional=True):
+    def __init__(self, input_size, hidden_size, number_classes, bidirectional=False):
         """
         Initializes the LSTM Autoencoder model.
         Args:
             input_size (int): The number of input features.
             hidden_size (int): The number of features in the hidden state.
             number_classes (int): The number of output classes.
-            bidirectional (bool, optional): If True, becomes a bidirectional LSTM. Default is True.
+            bidirectional (bool, optional): If True, becomes a bidirectional LSTM. Default is False.
         """
         super().__init__()
         self.encoder = nn.LSTM(input_size, hidden_size, batch_first=True, bidirectional=bidirectional)
@@ -98,13 +98,13 @@ class LSTM_AE_Classifier(nn.Module):
         return x_hat, cls
 
 class LSTM_AR(nn.Module):
-    def __init__(self, input_size, hidden_size, bidirectional=True, num_layers=1):
+    def __init__(self, input_size, hidden_size, bidirectional=False, num_layers=1):
         """
         Initializes the LSTM Autoencoder model.
         Args:
             input_size (int): The number of input features.
             hidden_size (int): The number of features in the hidden state.
-            bidirectional (bool, optional): If True, the encoder LSTM will be bidirectional. Defaults to True.
+            bidirectional (bool, optional): If True, the encoder LSTM will be bidirectional. Defaults to False.
         """
         super().__init__()
         self.encoder = nn.LSTM(input_size, hidden_size, batch_first=True, bidirectional=bidirectional, num_layers=num_layers)
@@ -125,18 +125,6 @@ class LSTM_AR(nn.Module):
         x_hat, _ = self.decoder(z)
         y_hat, _ = self.regressor(z)
         return x_hat, y_hat
-    
-    # def generate(self, x, N):
-    #     input_x = x[i : i + N]
-    #     preds = torch.zeros(x.shape[0], N, x.shape[2])
-    #     for i in range(N):
-    #         z, _ = self.encoder(input_x)
-    #         y_hat, _ = self.regressor(z)
-    #         preds[:, i, :] = y_hat[:, -1, :]
-    #         # print(f"{input_x.shape=}, {y_hat[:, -1, :].unsqueeze(1).shape=}, {preds[:, i, :].shape=}, {preds.shape=}, {y_hat.shape=}")
-    #         # input_x = torch.cat((input_x, y_hat[:, -1, :].unsqueeze(1)), dim=1)
-    #         input_x = x[i : i + N]
-    #     return preds
     
     def generate(self, x):
         z, _ = self.encoder(x)

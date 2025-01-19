@@ -21,6 +21,7 @@ class SqrtSched(_LRScheduler):
 
 def train_epoch_AE(train_loader, model, optimizer, criterion, grad_clip, device):
     running_loss = 0.0
+    model.train()
     for data in train_loader:
         if isinstance(data, list):
             data, _ = data
@@ -34,15 +35,16 @@ def train_epoch_AE(train_loader, model, optimizer, criterion, grad_clip, device)
         optimizer.step()
         running_loss += loss.item()
 
-    total_loss = running_loss / len(train_loader)
+    total_loss = running_loss / len(train_loader.dataset)
     return total_loss
 
 def train_epoch_CLS(train_loader, model, optimizer, criterion, grad_clip, device):
     running_loss = 0.0
     ce_criterion = nn.CrossEntropyLoss()
+    model.train()
     for data, targets in train_loader:
         optimizer.zero_grad()
-        targets = one_hot(targets, 10).to(torch.float32).to(device) # fix to generalize            
+        targets = one_hot(targets, 10).to(torch.float32).to(device)   
         data = data.float().to(device)
         output, probs = model(data)
         output = output.to(device)
@@ -56,13 +58,14 @@ def train_epoch_CLS(train_loader, model, optimizer, criterion, grad_clip, device
         optimizer.step()
         running_loss += loss.item()
 
-    total_loss = running_loss / len(train_loader)
+    total_loss = running_loss / len(train_loader.dataset)
     return total_loss
 
 def train_epoch_regressor(train_loader, model, optimizer, criterion, grad_clip, device, lambda_ar=1):
     running_loss = 0.0
     ar_running_loss = 0.0
     ae_running_loss = 0.0
+    model.train()
     for data, targets in train_loader:
         optimizer.zero_grad()
         targets = targets.to(device)
@@ -79,10 +82,9 @@ def train_epoch_regressor(train_loader, model, optimizer, criterion, grad_clip, 
         ar_running_loss += ar_loss.item()
         ae_running_loss += ae_loss.item()
 
-    total_loss = running_loss / len(train_loader)
-    ar_total_loss = ar_running_loss / len(train_loader)
-    ae_total_loss = ae_running_loss / len(train_loader)
-    return ae_running_loss, ar_running_loss
+    ar_total_loss = ar_running_loss / len(train_loader.dataset)
+    ae_total_loss = ae_running_loss / len(train_loader.dataset)
+    return ae_total_loss, ar_total_loss
 
 def evaluate_AE(val_loader, model, criterion, device):
     accumulative_loss = 0.0
@@ -98,7 +100,7 @@ def evaluate_AE(val_loader, model, criterion, device):
             loss = criterion(output, data)
             accumulative_loss += loss.item()
 
-    total_loss = accumulative_loss / len(val_loader)
+    total_loss = accumulative_loss / len(val_loader.dataset)
     return total_loss, all_outputs
 
 def evaluate_CLS(val_loader, model, criterion, device):
@@ -126,7 +128,7 @@ def evaluate_CLS(val_loader, model, criterion, device):
             accumulative_loss += loss.item()
 
     accuracy = (torch.tensor(labels) == torch.tensor(preds)).sum().item() / len(labels)
-    total_loss = accumulative_loss / len(val_loader)
+    total_loss = accumulative_loss / len(val_loader.dataset)
     return total_loss, accuracy
 
 def evaluate_regressor(val_loader, model, criterion, device):
@@ -157,9 +159,9 @@ def evaluate_regressor(val_loader, model, criterion, device):
             ar_accumulative_loss += ar_loss.item()
             ae_accumulative_loss += ae_loss.item()
 
-    ar_total_loss = ar_accumulative_loss / len(val_loader)
-    ae_total_loss = ae_accumulative_loss / len(val_loader)
-    return ar_total_loss, ae_total_loss
+    ar_total_loss = ar_accumulative_loss / len(val_loader.dataset)
+    ae_total_loss = ae_accumulative_loss / len(val_loader.dataset)
+    return ae_total_loss, ar_total_loss
 
 def evaluate_regressor_one_step(val_loader, model, criterion, device):
     accumulative_loss = 0.0
@@ -172,7 +174,7 @@ def evaluate_regressor_one_step(val_loader, model, criterion, device):
             loss = criterion(y_hat, targets)
             accumulative_loss += loss.item()
 
-    total_loss = accumulative_loss / len(val_loader)
+    total_loss = accumulative_loss / len(val_loader.dataset)
     return total_loss
 
 MODELS = {
@@ -283,9 +285,9 @@ def plot_train_losses(train_loader,
         if model_type != 'ae':
             train_metric2 = train_metrics[1]
             train_metric2s.append(train_metric2)
-        train_line.set_data(range(1, len(train_losses) + 1), train_losses)
+        train_line.set_data(range(len(train_losses)), train_losses)
         if model_type != 'ae':
-            metric2_line.set_data(range(1, len(train_metric2s) + 1), train_metric2s)
+            metric2_line.set_data(range(len(train_metric2s)), train_metric2s)
         for a in axis:
             a.relim()
             a.autoscale_view()
@@ -301,19 +303,18 @@ def plot_train_losses(train_loader,
     model.to(device)
     model.train()
     train_metric2 = None
+    train_loss, train_metric2 = evaluate(train_loader, model, criterion, model_type, device)
+
+    update_graph(train_loss, train_metric2, learning_rate=learning_rate)
 
     optimizer = optimizer_type(model.parameters(), lr=learning_rate)
     print(f"Optimizer: {optimizer}")
     scheduler = SqrtSched(optimizer)
-    losses = []
     for _ in tqdm(range(epochs), desc="Training"):
         trainer = MODELS[model_type]['TRAINER']
         train_loss = trainer(train_loader, model, optimizer, criterion, grad_clip, device)
-        losses.append(train_loss)
-        if model_type != 'ae':
-            # train_loss, train_metric2 = evaluate(train_loader, model, criterion, model_type, device)
-            # model.train()
-            train_loss, train_metric2 = train_loss
+        # if model_type != 'ae':
+        #     train_loss, train_metric2 = train_loss
         update_graph(train_loss, train_metric2, learning_rate=optimizer.param_groups[0]["lr"])
         scheduler.step()
 
@@ -342,7 +343,7 @@ def optuna_train(
         if model_type == 'cls':
             input_shape = train_loader.dataset.data.shape[2]
         elif model_type == 'ae':
-            input_shape = train_loader.dataset.shape[2]
+            input_shape = [data.shape[2] for data in train_loader][0]
         elif model_type == 'ar':
             input_shape = train_loader.dataset[0][0].shape[1]
 

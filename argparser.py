@@ -10,7 +10,7 @@ def get_train_args():
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
     parser.add_argument('--optimizer', type=str, default='adam', help='Optimizer')
     parser.add_argument('--data_folder', type=str, default='synth_data/', help='Data folder')
-    parser.add_argument('--bidirectional', action='store_true', help='whether to use bidirectional LSTM')
+    parser.add_argument('--bidirectional', action='store_true', default=False, help='whether to use bidirectional LSTM')
     parser.add_argument('--pixel_wise', action='store_true', help='whether to use pixel-wise transformation')
     parser.add_argument('--hyper_search', action='store_true', help='Whether to perform hyperparameter search')
     parser.add_argument('--n_trials', type=int, default=20, help='number of trials for hyperparameter search')

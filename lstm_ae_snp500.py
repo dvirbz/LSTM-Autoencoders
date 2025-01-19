@@ -19,9 +19,6 @@ def plot_daily_max(df, stocks, save_path):
     os.makedirs(save_path, exist_ok=True)
     for stock in stocks:
         plt.subplot(len(stocks), 1, stocks.index(stock) + 1)
-        ax = sns.lineplot(data=df[df["symbol"] == stock], x="date", y="high")
-        ax.set_xlabel("Date", fontsize=14)
-        ax.set_ylabel("High", fontsize=14)
         plt.title(f"{stock} Daily High", fontsize=16)
     plt.savefig(f'{save_path}/daily_max.png')
     plt.show()    
@@ -85,25 +82,39 @@ def plot_ae(test_loader, model, number_of_plots=3):
                 
         open, high, low, close = data.squeeze().permute(1, 0).detach().cpu().numpy()
         pred_open, pred_high, pred_low, pred_close = output.squeeze().permute(1, 0).detach().cpu().numpy()
+        plt.figure(figsize=(16, 16))
         plt.subplot(2, 2, 1)
-        plt.plot(open, label="Open")
-        plt.plot(pred_open, label="Pred Open")
+        plt.plot(open, label="True")
+        plt.plot(pred_open, label="Pred")
+        plt.title("Open", fontsize=16)
+        plt.xlabel("Days", fontsize=12)
+        plt.ylabel("Price (Standardized)", fontsize=12)
         plt.legend()
         
         plt.subplot(2, 2, 2)
-        plt.plot(high, label="High")
-        plt.plot(pred_high, label="Pred High")
+        plt.plot(high, label="True")
+        plt.plot(pred_high, label="Pred")
+        plt.title("High", fontsize=16)
+        plt.xlabel("Days", fontsize=12)
+        plt.ylabel("Price (Standardized)", fontsize=12)
         plt.legend()
         
         plt.subplot(2, 2, 3)
-        plt.plot(low, label="Low")
-        plt.plot(pred_low, label="Pred Low")
+        plt.plot(low, label="True")
+        plt.plot(pred_low, label="Pred")
+        plt.title("Low", fontsize=16)
+        plt.xlabel("Days", fontsize=12)
+        plt.ylabel("Price (Standardized)", fontsize=12)
         plt.legend()
         
         plt.subplot(2, 2, 4)
-        plt.plot(close, label="Close")
-        plt.plot(pred_close, label="Pred Close")
+        plt.plot(close, label="True")
+        plt.plot(pred_close, label="Pred")
+        plt.title("Close", fontsize=16)
+        plt.xlabel("Days", fontsize=12)
+        plt.ylabel("Price (Standardized)", fontsize=12)
         plt.legend()
+        plt.savefig(f"plots/SP500/AE_plot_{i}.png")
         plt.show()
         i += 1
 
@@ -138,43 +149,43 @@ def plot_ar(test_loader, model, number_of_plots=3, device="cuda", save_path="./p
         
         plt.figure(figsize=(16, 16))
         plt.subplot(2, 2, 1)
-        plt.plot(open, label="Open")
-        plt.plot(pred_open, label="Pred Open")
-        plt.plot(one_step_open, label="One Step Pred Open")
+        plt.plot(open, label="True")
+        plt.plot(pred_open, label="Multi-step Pred")
+        plt.plot(one_step_open, label="One Step Pred")
         plt.axvline(first_data.shape[1], color='r', linestyle='--')
-        plt.title("Open")
-        plt.xlabel("Days")
-        plt.ylabel("Price")
+        plt.title("Open", fontsize=16)
+        plt.xlabel("Days", fontsize=12)
+        plt.ylabel("Price (Standardized)", fontsize=12)
         plt.legend()
         
         plt.subplot(2, 2, 2)
-        plt.plot(high, label="High")
-        plt.plot(pred_high, label="Pred High")
-        plt.plot(one_step_high, label="One Step Pred High")
+        plt.plot(high, label="True")
+        plt.plot(pred_high, label="Multi-step Pred")
+        plt.plot(one_step_high, label="One Step Pred")
         plt.axvline(first_data.shape[1], color='r', linestyle='--')
-        plt.title("High")
-        plt.xlabel("Days")
-        plt.ylabel("Price")
+        plt.title("High", fontsize=16)
+        plt.xlabel("Days", fontsize=12)
+        plt.ylabel("Price (Standardized)", fontsize=12)
         plt.legend()
         
         plt.subplot(2, 2, 3)
-        plt.plot(low, label="Low")
-        plt.plot(pred_low, label="Pred Low")
-        plt.plot(one_step_low, label="One Step Pred Low")
+        plt.plot(low, label="True")
+        plt.plot(pred_low, label="Multi-step Pred")
+        plt.plot(one_step_low, label="One Step Pred")
         plt.axvline(first_data.shape[1], color='r', linestyle='--')
-        plt.title("Low")
-        plt.xlabel("Days")
-        plt.ylabel("Price")
+        plt.title("Low", fontsize=16)
+        plt.xlabel("Days", fontsize=12)
+        plt.ylabel("Price (Standardized)", fontsize=12)
         plt.legend()
         
         plt.subplot(2, 2, 4)
         plt.plot(close, label="Close")
-        plt.plot(pred_close, label="Pred Close")
-        plt.plot(one_step_close, label="One Step Pred Close")
+        plt.plot(pred_close, label="Multi-step Pred")
+        plt.plot(one_step_close, label="One Step Pred")
         plt.axvline(first_data.shape[1], color='r', linestyle='--')
-        plt.title("Close")
-        plt.xlabel("Days")
-        plt.ylabel("Price")
+        plt.title("Close", fontsize=16)
+        plt.xlabel("Days", fontsize=12)
+        plt.ylabel("Price (Standardized)", fontsize=12)
         plt.legend()
         
         plt.savefig(f"{save_path}/AR_plot_{i}.png")
@@ -203,6 +214,9 @@ def main():
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
+    train_data = train_data.to(device)
+    val_data = val_data.to(device)
+    test_data = test_data.to(device)
     
     #criterion
     criterion = nn.MSELoss()
@@ -266,7 +280,7 @@ def main():
     plot_train_losses(train_loader,
                       model,
                       criterion,
-                      epochs,
+                      args.epochs,
                       gradient_clip,
                       lr,
                       optimizer_type,

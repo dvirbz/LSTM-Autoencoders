@@ -105,9 +105,12 @@ def main():
 
     
     #evaluate
-    test_loss, accuracy = evaluate(test_loader, model, criterion, model_type, device)
-    print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {accuracy:.4f}")
-
+    if model_type == 'cls':
+        test_loss, accuracy = evaluate(test_loader, model, criterion, model_type, device)
+        print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {accuracy:.4f}")
+    else:
+        test_loss, _ = evaluate(test_loader, model, criterion, model_type, device)
+        print(f"Test Loss: {test_loss:.4f}")
 
     #save model
     models_folder = "./models"
